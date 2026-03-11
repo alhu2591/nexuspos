@@ -121,6 +121,8 @@ export interface AuthSession {
   token: string;
   expiresAt: Date;
   isPin: boolean;
+  storeId?: string;
+  deviceId?: string;
 }
 
 // ============================================================
@@ -409,6 +411,10 @@ export interface IDiscountRule {
   couponCode?: string;
   isActive: boolean;
   requiresAuth: boolean;
+  startDate?: Date;
+  endDate?: Date;
+  maxUses?: number;
+  usedCount?: number;
 }
 
 export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT' | 'BUY_X_GET_Y' | 'BUNDLE';

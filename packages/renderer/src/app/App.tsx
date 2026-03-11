@@ -11,7 +11,7 @@ import { LoadingScreen } from '../components/ui/LoadingScreen';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ToastProvider } from '../components/ui/ToastProvider';
 import { HardwareStatusBar } from '../components/hardware/HardwareStatusBar';
-import '../i18n';
+import '../i18n/index';
 
 // ── Lazy-loaded feature screens (code splitting for performance)
 const CheckoutScreen = React.lazy(() => import('../features/checkout/screens/CheckoutScreen'));
@@ -37,7 +37,7 @@ const CustomerDisplayScreen = React.lazy(() => import('../features/customer-disp
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuthStore();
 
-  if (isLoading) return <LoadingScreen message="Checking authentication..." />;
+  if (isLoading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" replace />;
 
   return <>{children}</>;

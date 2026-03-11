@@ -361,22 +361,22 @@ export const useCheckoutStore = create<CartState & CartActions>()(
 
       try {
         const sessionResult = await ipcService.invoke('auth:session', {});
-        const session = sessionResult.data;
+        const session = sessionResult.data as { deviceId: string; userId: string; storeId: string } | null;
 
         const shiftResult = await ipcService.invoke('shift:current', {
-          deviceId: session.deviceId,
+          deviceId: session?.deviceId,
         });
-        const shift = shiftResult.data;
+        const shift = shiftResult.data as { id: string } | null;
 
         if (!shift) {
           throw new Error('No open shift found. Please open a shift before checkout.');
         }
 
         const saleData = {
-          deviceId: session.deviceId,
+          deviceId: session?.deviceId,
           shiftId: shift.id,
-          cashierId: session.userId,
-          storeId: session.storeId,
+          cashierId: session?.userId,
+          storeId: session?.storeId,
           customerId: state.customer?.id,
           lines: state.lines.map((l) => ({
             productId: l.productId,
@@ -395,7 +395,7 @@ export const useCheckoutStore = create<CartState & CartActions>()(
           throw new Error(result.error?.message ?? 'Checkout failed');
         }
 
-        const saleId = result.data.id;
+        const saleId = (result.data as { id: string }).id;
 
         set((s) => {
           s.lastCompletedSaleId = saleId;

@@ -12,13 +12,13 @@ import {
   calculateCartTotals,
   VATEngine,
   centsFromDecimalString,
-} from '../src/utils/vatEngine';
+} from '../utils/vatEngine';
 import {
   validateDiscountRule,
   calculateDiscountAmount,
   applyCartDiscount,
-} from '../src/utils/discountEngine';
-import type { ITaxRule, IDiscountRule, ICartLine, IProduct } from '../src/types';
+} from '../utils/discountEngine';
+import type { ITaxRule, IDiscountRule, ICartLine, IProduct } from '../types/index';
 
 // ============================================================
 // VAT ENGINE TESTS

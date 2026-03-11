@@ -128,8 +128,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           {/* Sync status */}
           {!collapsed && (
             <div className="flex items-center gap-2 px-2 py-1 text-xs text-gray-400">
-              {syncStatus?.peerCount > 0 ? (
-                <><Wifi size={12} className="text-green-400" /> {syncStatus.peerCount} Terminal(s)</>
+              {syncStatus != null && syncStatus.peerCount > 0 ? (
+                <><Wifi size={12} className="text-green-400" /> {(syncStatus?.peerCount ?? 0)} Terminal(s)</>
               ) : (
                 <><WifiOff size={12} /> Kein Netz</>
               )}
