@@ -1,0 +1,25 @@
+{
+  "name": "@nexuspos/main",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@nexuspos/shared": "*",
+    "@nexuspos/database": "*",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "@prisma/client": "^5.8.0",
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "electron": "^28.2.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,303 @@
+name: NexusPOS CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20.x'
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+jobs:
+  # ────────────────────────────────────────────────────────
+  # JOB 1: Quality Gates (lint + typecheck + test)
+  # Runs on all pushes and PRs
+  # ────────────────────────────────────────────────────────
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for turbo cache keys
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: 'file:./test.db'
+
+      - name: Run linter
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Run type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm run test -- --coverage --reporter=json --outputFile=coverage/results.json
+        env:
+          DATABASE_URL: 'file:./test.db'
+          NODE_ENV: test
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./packages/*/coverage/lcov.info
+          flags: unittests
+
+  # ────────────────────────────────────────────────────────
+  # JOB 2: Build (compile TypeScript, bundle React)
+  # ────────────────────────────────────────────────────────
+  build:
+    name: Build Application
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: 'file:./prod.db'
+
+      - name: Build all packages
+        run: npm run build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: 'file:./prod.db'
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: |
+            packages/main/dist/
+            packages/renderer/dist/
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────
+  # JOB 3: Package Windows Installer
+  # Only on tags or main branch
+  # ────────────────────────────────────────────────────────
+  package-windows:
+    name: Package Windows
+    needs: build
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+
+      - name: Generate Prisma client (Windows)
+        run: npm run db:generate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: 'file:./prod.db'
+
+      - name: Package Windows installer
+        run: npm run package:win
+        env:
+          NODE_ENV: production
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDOWS_CERT_SUBJECT: ${{ secrets.WINDOWS_CERT_SUBJECT }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-packages
+          path: dist-packages/*.{exe,zip}
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # JOB 4: Package Linux
+  # ────────────────────────────────────────────────────────
+  package-linux:
+    name: Package Linux
+    needs: build
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            dpkg-dev \
+            fakeroot \
+            rpm \
+            libarchive-tools
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+
+      - name: Generate Prisma client (Linux)
+        run: npm run db:generate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: 'file:./prod.db'
+
+      - name: Package Linux installers
+        run: npm run package:linux
+        env:
+          NODE_ENV: production
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-packages
+          path: dist-packages/*.{AppImage,deb,rpm}
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # JOB 5: Package macOS
+  # ────────────────────────────────────────────────────────
+  package-macos:
+    name: Package macOS
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+
+      - name: Import code signing certificate
+        if: secrets.APPLE_CERTIFICATE != ''
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Generate Prisma client (macOS)
+        run: npm run db:generate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: 'file:./prod.db'
+
+      - name: Package macOS DMG
+        run: npm run package:mac
+        env:
+          NODE_ENV: production
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+          APPLE_NOTARIZE: ${{ secrets.APPLE_NOTARIZE }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-packages
+          path: dist-packages/*.{dmg,zip}
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # JOB 6: Create GitHub Release
+  # Only on version tags
+  # ────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [package-windows, package-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all packages
+        uses: actions/download-artifact@v3
+        with:
+          path: release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-assets/windows-packages/*
+            release-assets/linux-packages/*
+            release-assets/macos-packages/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

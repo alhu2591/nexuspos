@@ -1,0 +1,1093 @@
+// NexusPOS — Complete Database Schema
+// Prisma Schema v1.0.0
+// Engine: SQLite with WAL mode
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "windows", "linux-musl", "darwin"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// STORE & DEVICE MANAGEMENT
+// ============================================================
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  legalName   String
+  taxId       String?  // Steuernummer / VAT ID
+  address     String?
+  city        String?
+  postalCode  String?
+  country     String   @default("DE")
+  phone       String?
+  email       String?
+  website     String?
+  logoPath    String?
+  currency    String   @default("EUR")
+  timezone    String   @default("Europe/Berlin")
+  locale      String   @default("de-DE")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branches    Branch[]
+  devices     Device[]
+  users       User[]
+  shifts      Shift[]
+  settings    StoreSetting[]
+  taxRules    TaxRule[]
+  discountRules DiscountRule[]
+  customers   Customer[]
+  products    Product[]
+  categories  Category[]
+
+  @@index([isActive])
+}
+
+model Branch {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String
+  address     String?
+  city        String?
+  postalCode  String?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store       Store    @relation(fields: [storeId], references: [id])
+  devices     Device[]
+  shifts      Shift[]
+
+  @@index([storeId])
+  @@index([isActive])
+}
+
+model Device {
+  id             String       @id @default(cuid())
+  storeId        String
+  branchId       String?
+  name           String
+  serialNumber   String?      @unique
+  deviceType     DeviceType   @default(POS_TERMINAL)
+  platformOS     String?
+  appVersion     String?
+  isActive       Boolean      @default(true)
+  isPrimary      Boolean      @default(false)
+  lastSeenAt     DateTime?
+  registeredAt   DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  store          Store        @relation(fields: [storeId], references: [id])
+  branch         Branch?      @relation(fields: [branchId], references: [id])
+  shifts         Shift[]
+  sales          Sale[]
+  syncQueue      SyncQueue[]
+  deviceConfig   DeviceConfig?
+  printerConfigs PrinterConfig[]
+  cashMovements  CashMovement[]
+
+  @@index([storeId])
+  @@index([isActive])
+  @@index([serialNumber])
+}
+
+enum DeviceType {
+  POS_TERMINAL
+  CUSTOMER_DISPLAY
+  KITCHEN_DISPLAY
+  MANAGER_TERMINAL
+  MOBILE_POS
+}
+
+// ============================================================
+// USER MANAGEMENT & RBAC
+// ============================================================
+
+model User {
+  id           String    @id @default(cuid())
+  storeId      String
+  username     String
+  email        String?
+  passwordHash String
+  pin          String?   // Hashed PIN for fast cashier switch
+  firstName    String
+  lastName     String
+  roleId       String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  store        Store     @relation(fields: [storeId], references: [id])
+  role         Role      @relation(fields: [roleId], references: [id])
+  shifts       Shift[]
+  sales        Sale[]    @relation("CashierSales")
+  auditLogs    AuditLog[]
+
+  @@unique([storeId, username])
+  @@unique([storeId, email])
+  @@index([storeId])
+  @@index([isActive])
+  @@index([roleId])
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  isSystem    Boolean      @default(false)
+  permissions Permission[]
+  users       User[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([name])
+}
+
+model Permission {
+  id       String  @id @default(cuid())
+  roleId   String
+  resource String  // e.g., "checkout", "products", "reports"
+  action   String  // e.g., "read", "write", "delete", "void"
+
+  role     Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, resource, action])
+  @@index([roleId])
+}
+
+// ============================================================
+// PRODUCT CATALOG
+// ============================================================
+
+model Category {
+  id          String     @id @default(cuid())
+  storeId     String
+  parentId    String?
+  name        String
+  description String?
+  colorHex    String?
+  iconName    String?
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  store       Store      @relation(fields: [storeId], references: [id])
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+
+  @@index([storeId])
+  @@index([parentId])
+  @@index([isActive])
+}
+
+model Product {
+  id              String          @id @default(cuid())
+  storeId         String
+  categoryId      String?
+  taxRuleId       String?
+  sku             String?
+  barcode         String?
+  name            String
+  description     String?
+  imageUrl        String?
+  unitPrice       Int             // Price in cents (avoid float errors)
+  costPrice       Int?            // Cost in cents
+  taxInclusive    Boolean         @default(true)
+  unit            ProductUnit     @default(PIECE)
+  minStockLevel   Int?
+  maxStockLevel   Int?
+  isActive        Boolean         @default(true)
+  isSoldByWeight  Boolean         @default(false)
+  isService       Boolean         @default(false)
+  allowDiscount   Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  store           Store           @relation(fields: [storeId], references: [id])
+  category        Category?       @relation(fields: [categoryId], references: [id])
+  taxRule         TaxRule?        @relation(fields: [taxRuleId], references: [id])
+  inventory       InventoryItem[]
+  saleLines       SaleLine[]
+  stockMovements  StockMovement[]
+  productVariants ProductVariant[]
+  priceOverrides  PriceOverride[]
+
+  @@unique([storeId, sku])
+  @@unique([storeId, barcode])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([barcode])
+  @@index([name])
+}
+
+enum ProductUnit {
+  PIECE
+  KG
+  GRAM
+  LITER
+  MILLILITER
+  METER
+  HOUR
+  DAY
+}
+
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  sku        String?
+  barcode    String?
+  name       String
+  attributes Json     // { "size": "M", "color": "Red" }
+  unitPrice  Int
+  costPrice  Int?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([barcode])
+}
+
+model PriceOverride {
+  id          String    @id @default(cuid())
+  productId   String
+  name        String
+  price       Int
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([isActive])
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  productId     String    @unique
+  quantity      Int       @default(0)    // In base units (grams, ml, pieces)
+  reservedQty   Int       @default(0)
+  lastCountAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  product       Product   @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+model StockMovement {
+  id            String            @id @default(cuid())
+  productId     String
+  shiftId       String?
+  saleId        String?
+  userId        String?
+  movementType  StockMovementType
+  quantity      Int               // Positive = in, Negative = out
+  previousQty   Int
+  newQty        Int
+  reason        String?
+  reference     String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  product       Product           @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([shiftId])
+  @@index([saleId])
+  @@index([createdAt])
+}
+
+enum StockMovementType {
+  SALE
+  RETURN
+  ADJUSTMENT
+  PURCHASE
+  WASTE
+  TRANSFER
+  INITIAL
+  COUNT_CORRECTION
+}
+
+// ============================================================
+// CUSTOMERS
+// ============================================================
+
+model Customer {
+  id           String    @id @default(cuid())
+  storeId      String
+  customerNum  String?
+  firstName    String
+  lastName     String?
+  email        String?
+  phone        String?
+  company      String?
+  taxId        String?   // For B2B invoices
+  address      String?
+  city         String?
+  postalCode   String?
+  country      String?
+  notes        String?
+  loyaltyPoints Int      @default(0)
+  totalSpent   Int       @default(0)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  store        Store     @relation(fields: [storeId], references: [id])
+  sales        Sale[]
+  invoices     Invoice[]
+
+  @@unique([storeId, email])
+  @@unique([storeId, customerNum])
+  @@index([storeId])
+  @@index([isActive])
+  @@index([lastName])
+  @@index([phone])
+}
+
+// ============================================================
+// SALES / CHECKOUT
+// ============================================================
+
+model Sale {
+  id              String        @id @default(cuid())
+  storeId         String?
+  deviceId        String
+  shiftId         String
+  cashierId       String
+  customerId      String?
+  saleNumber      String        @unique  // POS-2024-00001
+  status          SaleStatus    @default(COMPLETED)
+  subtotal        Int           // Cents, before discounts
+  discountAmount  Int           @default(0)
+  taxAmount       Int           // Total VAT
+  totalAmount     Int           // Final amount due
+  paidAmount      Int           @default(0)
+  changeAmount    Int           @default(0)
+  notes           String?
+  tableNumber     String?       // For restaurant POS
+  fiscalReceiptId String?       // TSE signature reference
+  syncedAt        DateTime?
+  voidedAt        DateTime?
+  voidReason      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  device          Device        @relation(fields: [deviceId], references: [id])
+  shift           Shift         @relation(fields: [shiftId], references: [id])
+  cashier         User          @relation("CashierSales", fields: [cashierId], references: [id])
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  lines           SaleLine[]
+  payments        Payment[]
+  taxBreakdown    TaxBreakdown[]
+  receipt         Receipt?
+  invoice         Invoice?
+  refunds         Refund[]
+  discountApplied AppliedDiscount[]
+  fiscalEvents    FiscalEvent[]
+
+  @@index([deviceId])
+  @@index([shiftId])
+  @@index([cashierId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([saleNumber])
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  VOIDED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  ON_HOLD
+}
+
+model SaleLine {
+  id             String    @id @default(cuid())
+  saleId         String
+  productId      String
+  variantId      String?
+  lineNumber     Int
+  productName    String    // Snapshot at time of sale
+  productSku     String?
+  barcode        String?
+  quantity       Int       // In base units × 1000 (3 decimal precision)
+  unitPrice      Int       // Cents
+  discountAmount Int       @default(0)
+  taxAmount      Int       // Cents
+  taxRate        Int       // Rate × 100 (e.g., 1900 = 19%)
+  taxInclusive   Boolean   @default(true)
+  lineTotal      Int       // Cents (final)
+  notes          String?
+  weight         Int?      // Grams (for weight-based products)
+
+  sale           Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product        Product   @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model TaxBreakdown {
+  id         String  @id @default(cuid())
+  saleId     String
+  taxRuleId  String?
+  taxRate    Int     // Rate × 100
+  taxClass   String  // "standard", "reduced", "zero"
+  netAmount  Int
+  taxAmount  Int
+  grossAmount Int
+
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  id             String        @id @default(cuid())
+  saleId         String
+  paymentMethod  PaymentMethod
+  amount         Int           // Cents
+  tendered       Int?          // Cash tendered
+  change         Int?          // Change given
+  reference      String?       // Card auth code, external ref
+  cardLast4      String?
+  cardBrand      String?
+  processorRef   String?       // Payment terminal reference
+  status         PaymentStatus @default(COMPLETED)
+  processedAt    DateTime      @default(now())
+  failureReason  String?
+
+  sale           Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  refunds        Refund[]
+
+  @@index([saleId])
+  @@index([status])
+  @@index([paymentMethod])
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_CREDIT
+  CARD_DEBIT
+  CONTACTLESS
+  VOUCHER
+  GIFT_CARD
+  BANK_TRANSFER
+  CRYPTO
+  SPLIT
+  ACCOUNT       // Customer account/credit
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// ============================================================
+// REFUNDS
+// ============================================================
+
+model Refund {
+  id            String       @id @default(cuid())
+  saleId        String
+  paymentId     String?
+  userId        String
+  refundNumber  String       @unique
+  amount        Int
+  reason        String
+  refundMethod  PaymentMethod
+  status        RefundStatus @default(COMPLETED)
+  isPartial     Boolean      @default(false)
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  sale          Sale         @relation(fields: [saleId], references: [id])
+  payment       Payment?     @relation(fields: [paymentId], references: [id])
+  lines         RefundLine[]
+
+  @@index([saleId])
+  @@index([createdAt])
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model RefundLine {
+  id         String  @id @default(cuid())
+  refundId   String
+  saleLineId String?
+  productId  String?
+  productName String
+  quantity   Int
+  amount     Int
+
+  refund     Refund  @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  @@index([refundId])
+}
+
+// ============================================================
+// DISCOUNTS
+// ============================================================
+
+model DiscountRule {
+  id              String           @id @default(cuid())
+  storeId         String
+  name            String
+  description     String?
+  discountType    DiscountType
+  value           Int              // Cents (for FIXED) or percentage × 100
+  scope           DiscountScope    @default(CART)
+  categoryId      String?
+  productId       String?
+  minAmount       Int?             // Min cart total (cents)
+  minQuantity     Int?
+  maxUses         Int?
+  usedCount       Int              @default(0)
+  couponCode      String?          @unique
+  startDate       DateTime?
+  endDate         DateTime?
+  isActive        Boolean          @default(true)
+  requiresAuth    Boolean          @default(false) // Manager approval
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  store           Store            @relation(fields: [storeId], references: [id])
+  appliedDiscounts AppliedDiscount[]
+
+  @@index([storeId])
+  @@index([isActive])
+  @@index([couponCode])
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  BUY_X_GET_Y
+  BUNDLE
+}
+
+enum DiscountScope {
+  CART
+  LINE_ITEM
+  CATEGORY
+  PRODUCT
+}
+
+model AppliedDiscount {
+  id             String       @id @default(cuid())
+  saleId         String
+  discountRuleId String?
+  name           String       // Snapshot
+  discountType   DiscountType
+  value          Int
+  amount         Int          // Actual discount amount applied
+
+  sale           Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  discountRule   DiscountRule? @relation(fields: [discountRuleId], references: [id])
+
+  @@index([saleId])
+}
+
+// ============================================================
+// TAX RULES
+// ============================================================
+
+model TaxRule {
+  id          String    @id @default(cuid())
+  storeId     String
+  name        String    // e.g., "MwSt 19%", "MwSt 7%"
+  rate        Int       // Rate × 100 (e.g., 1900 = 19.00%)
+  taxClass    String    @default("standard") // standard, reduced, zero, exempt
+  isDefault   Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store       Store     @relation(fields: [storeId], references: [id])
+  products    Product[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([isActive])
+}
+
+// ============================================================
+// SHIFTS & CASH MANAGEMENT
+// ============================================================
+
+model Shift {
+  id              String        @id @default(cuid())
+  storeId         String
+  branchId        String?
+  deviceId        String
+  userId          String
+  shiftNumber     String        @unique
+  status          ShiftStatus   @default(OPEN)
+  openingBalance  Int           @default(0)  // Cents
+  closingBalance  Int?
+  expectedBalance Int?
+  variance        Int?
+  openedAt        DateTime      @default(now())
+  closedAt        DateTime?
+  notes           String?
+
+  store           Store         @relation(fields: [storeId], references: [id])
+  branch          Branch?       @relation(fields: [branchId], references: [id])
+  device          Device        @relation(fields: [deviceId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
+  sales           Sale[]
+  cashMovements   CashMovement[]
+  shiftSummary    ShiftSummary?
+
+  @@index([storeId])
+  @@index([deviceId])
+  @@index([userId])
+  @@index([status])
+  @@index([openedAt])
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+  SUSPENDED
+}
+
+model ShiftSummary {
+  id               String  @id @default(cuid())
+  shiftId          String  @unique
+  totalSales       Int
+  totalRefunds     Int
+  totalDiscounts   Int
+  totalTax         Int
+  cashSales        Int
+  cardSales        Int
+  otherSales       Int
+  transactionCount Int
+  itemCount        Int
+  avgTransaction   Int
+  createdAt        DateTime @default(now())
+
+  shift            Shift   @relation(fields: [shiftId], references: [id])
+}
+
+model CashMovement {
+  id           String            @id @default(cuid())
+  shiftId      String
+  deviceId     String
+  userId       String?
+  movementType CashMovementType
+  amount       Int               // Cents
+  reason       String?
+  notes        String?
+  createdAt    DateTime          @default(now())
+
+  shift        Shift             @relation(fields: [shiftId], references: [id])
+  device       Device            @relation(fields: [deviceId], references: [id])
+
+  @@index([shiftId])
+  @@index([deviceId])
+  @@index([createdAt])
+}
+
+enum CashMovementType {
+  OPENING
+  CASH_IN
+  CASH_OUT
+  SALE
+  REFUND
+  CLOSING
+}
+
+// ============================================================
+// RECEIPTS & INVOICES
+// ============================================================
+
+model Receipt {
+  id              String    @id @default(cuid())
+  saleId          String    @unique
+  receiptNumber   String    @unique
+  templateId      String?
+  printedAt       DateTime?
+  emailedAt       DateTime?
+  emailAddress    String?
+  pdfPath         String?
+  rawContent      String?   // ESC/POS commands or HTML
+  createdAt       DateTime  @default(now())
+
+  sale            Sale      @relation(fields: [saleId], references: [id])
+  template        ReceiptTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([saleId])
+  @@index([receiptNumber])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  saleId          String?       @unique
+  customerId      String
+  templateId      String?
+  invoiceNumber   String        @unique  // INV-2024-00001
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime?
+  subtotal        Int
+  discountAmount  Int           @default(0)
+  taxAmount       Int
+  totalAmount     Int
+  paidAmount      Int           @default(0)
+  currency        String        @default("EUR")
+  notes           String?
+  internalNotes   String?
+  pdfPath         String?
+  sentAt          DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sale            Sale?         @relation(fields: [saleId], references: [id])
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  template        InvoiceTemplate? @relation(fields: [templateId], references: [id])
+  lines           InvoiceLine[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([invoiceNumber])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+  VOID
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  productId   String?
+  description String
+  quantity    Int
+  unitPrice   Int
+  taxRate     Int
+  taxAmount   Int
+  lineTotal   Int
+
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// ============================================================
+// PRINT TEMPLATES
+// ============================================================
+
+model ReceiptTemplate {
+  id           String    @id @default(cuid())
+  storeId      String?
+  name         String
+  isDefault    Boolean   @default(false)
+  headerText   String?
+  footerText   String?
+  showLogo     Boolean   @default(true)
+  showBarcode  Boolean   @default(false)
+  showQrCode   Boolean   @default(false)
+  paperWidth   Int       @default(80)  // mm (58 or 80)
+  templateData String    // JSON template config
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  receipts     Receipt[]
+
+  @@index([storeId])
+}
+
+model InvoiceTemplate {
+  id           String    @id @default(cuid())
+  storeId      String?
+  name         String
+  isDefault    Boolean   @default(false)
+  headerHtml   String?
+  footerHtml   String?
+  cssStyles    String?
+  templateHtml String    // Full HTML template with Handlebars vars
+  pageSize     String    @default("A4")
+  orientation  String    @default("portrait")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  invoices     Invoice[]
+
+  @@index([storeId])
+}
+
+// ============================================================
+// HARDWARE CONFIGURATION
+// ============================================================
+
+model PrinterConfig {
+  id           String      @id @default(cuid())
+  deviceId     String
+  name         String
+  printerType  PrinterType
+  connectionType String    // "usb", "serial", "network", "bluetooth"
+  address      String?     // IP:port or COM port or USB path
+  baudRate     Int?
+  paperWidth   Int         @default(80)
+  isDefault    Boolean     @default(false)
+  isActive     Boolean     @default(true)
+  settings     String?     // JSON
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  device       Device      @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId])
+}
+
+enum PrinterType {
+  RECEIPT
+  INVOICE
+  LABEL
+  KITCHEN
+}
+
+model DeviceConfig {
+  id                   String    @id @default(cuid())
+  deviceId             String    @unique
+  barcodeEnabled       Boolean   @default(true)
+  barcodeInputMethod   String    @default("hid") // "hid" | "serial"
+  barcodePort          String?
+  cashDrawerEnabled    Boolean   @default(false)
+  cashDrawerPort       String?
+  customerDisplayEnabled Boolean @default(false)
+  customerDisplayPort  String?
+  weighingScaleEnabled Boolean   @default(false)
+  weighingScalePort    String?
+  paymentTerminalEnabled Boolean @default(false)
+  paymentTerminalType  String?
+  kioskMode            Boolean   @default(false)
+  kioskLocked          Boolean   @default(false)
+  touchscreenMode      Boolean   @default(false)
+  idleTimeoutMin       Int       @default(15)
+  updatedAt            DateTime  @updatedAt
+
+  device               Device    @relation(fields: [deviceId], references: [id])
+}
+
+// ============================================================
+// STORE SETTINGS
+// ============================================================
+
+model StoreSetting {
+  id        String   @id @default(cuid())
+  storeId   String
+  key       String
+  value     String
+  dataType  String   @default("string") // string, number, boolean, json
+  updatedAt DateTime @updatedAt
+
+  store     Store    @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, key])
+  @@index([storeId])
+}
+
+model ThemeSettings {
+  id               String    @id @default(cuid())
+  storeId          String    @unique
+  primaryColor     String    @default("#2563eb")
+  secondaryColor   String    @default("#64748b")
+  accentColor      String    @default("#f59e0b")
+  backgroundColor  String    @default("#f8fafc")
+  fontFamily       String    @default("Inter")
+  borderRadius     String    @default("md")
+  isDarkMode       Boolean   @default(false)
+  logoPath         String?
+  updatedAt        DateTime  @updatedAt
+}
+
+// ============================================================
+// SYNC QUEUE (Multi-terminal)
+// ============================================================
+
+model SyncQueue {
+  id           String     @id @default(cuid())
+  deviceId     String
+  entityType   String     // "Sale", "Product", "Inventory", etc.
+  entityId     String
+  operation    SyncOp
+  payload      String     // JSON
+  vectorClock  String     // JSON vector clock
+  checksum     String?
+  status       SyncStatus @default(PENDING)
+  retryCount   Int        @default(0)
+  lastError    String?
+  createdAt    DateTime   @default(now())
+  processedAt  DateTime?
+
+  device       Device     @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId])
+  @@index([status])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+enum SyncOp {
+  CREATE
+  UPDATE
+  DELETE
+  VOID
+}
+
+enum SyncStatus {
+  PENDING
+  PROCESSING
+  SYNCED
+  CONFLICT
+  FAILED
+  SKIPPED
+}
+
+// ============================================================
+// FISCAL EVENTS (GoBD / KassenSichV)
+// ============================================================
+
+model FiscalEvent {
+  id               String    @id @default(cuid())
+  saleId           String?
+  eventType        String    // "StartTransaction", "FinishTransaction", "CancelTransaction"
+  processType      String?   // "Kassenbeleg-V1", "Bestellung-V1"
+  transactionNumber Int?
+  signature        String?   // TSE signature
+  signatureCounter Int?
+  serialNumber     String?   // TSE serial number
+  logTime          DateTime  @default(now())
+  payload          String?   // JSON payload
+  tseProvider      String?   // "swissbit", "cryptovision", "mock"
+  isVerified       Boolean   @default(false)
+  errorCode        String?
+
+  sale             Sale?     @relation(fields: [saleId], references: [id])
+
+  @@index([saleId])
+  @@index([eventType])
+  @@index([logTime])
+  @@index([transactionNumber])
+}
+
+// ============================================================
+// AUDIT & ERROR LOGGING
+// ============================================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  entityType  String
+  entityId    String
+  action      String    // "create", "update", "delete", "void", "login", etc.
+  oldValue    String?   // JSON snapshot before
+  newValue    String?   // JSON snapshot after
+  ipAddress   String?
+  deviceId    String?
+  metadata    String?   // JSON additional context
+  createdAt   DateTime  @default(now())
+
+  user        User?     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ErrorLog {
+  id          String    @id @default(cuid())
+  level       String    // "error", "warn", "fatal"
+  code        String?
+  message     String
+  stack       String?
+  context     String?   // JSON
+  deviceId    String?
+  userId      String?
+  resolved    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([level])
+  @@index([code])
+  @@index([createdAt])
+  @@index([resolved])
+}
+
+// ============================================================
+// REPORTS (Pre-aggregated for performance)
+// ============================================================
+
+model DailyReport {
+  id                String   @id @default(cuid())
+  storeId           String
+  deviceId          String?
+  reportDate        DateTime
+  totalSales        Int
+  totalRefunds      Int
+  netSales          Int
+  totalTax          Int
+  totalDiscounts    Int
+  cashTotal         Int
+  cardTotal         Int
+  otherTotal        Int
+  transactionCount  Int
+  itemsSold         Int
+  avgTransactionVal Int
+  newCustomers      Int
+  returningCustomers Int
+  topProductIds     String?  // JSON array of top product IDs
+  generatedAt       DateTime @default(now())
+
+  @@unique([storeId, deviceId, reportDate])
+  @@index([storeId])
+  @@index([reportDate])
+}
