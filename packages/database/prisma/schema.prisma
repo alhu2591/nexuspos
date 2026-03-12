@@ -76,7 +76,7 @@ model Device {
   branchId       String?
   name           String
   serialNumber   String?      @unique
-  deviceType     String   @default(POS_TERMINAL)
+  deviceType     String   @default("POS_TERMINAL")
   platformOS     String?
   appVersion     String?
   isActive       Boolean      @default(true)
@@ -197,7 +197,7 @@ model Product {
   unitPrice       Int             // Price in cents (avoid float errors)
   costPrice       Int?            // Cost in cents
   taxInclusive    Boolean         @default(true)
-  unit            String     @default(PIECE)
+  unit            String     @default("PIECE")
   minStockLevel   Int?
   maxStockLevel   Int?
   isActive        Boolean         @default(true)
@@ -351,7 +351,7 @@ model Sale {
   cashierId       String
   customerId      String?
   saleNumber      String        @unique  // POS-2024-00001
-  status          String    @default(COMPLETED)
+  status          String    @default("COMPLETED")
   subtotal        Int           // Cents, before discounts
   discountAmount  Int           @default(0)
   taxAmount       Int           // Total VAT
@@ -446,7 +446,7 @@ model Payment {
   cardLast4      String?
   cardBrand      String?
   processorRef   String?       // Payment terminal reference
-  status         String @default(COMPLETED)
+  status         String @default("COMPLETED")
   processedAt    DateTime      @default(now())
   failureReason  String?
 
@@ -473,7 +473,7 @@ model Refund {
   amount        Int
   reason        String
   refundMethod  String
-  status        String @default(COMPLETED)
+  status        String @default("COMPLETED")
   isPartial     Boolean      @default(false)
   notes         String?
   createdAt     DateTime     @default(now())
@@ -512,7 +512,7 @@ model DiscountRule {
   description     String?
   discountType    String
   value           Int              // Cents (for FIXED) or percentage × 100
-  scope           String    @default(CART)
+  scope           String    @default("CART")
   categoryId      String?
   productId       String?
   minAmount       Int?             // Min cart total (cents)
@@ -586,7 +586,7 @@ model Shift {
   deviceId        String
   userId          String
   shiftNumber     String        @unique
-  status          String   @default(OPEN)
+  status          String   @default("OPEN")
   openingBalance  Int           @default(0)  // Cents
   closingBalance  Int?
   expectedBalance Int?
@@ -678,7 +678,7 @@ model Invoice {
   customerId      String
   templateId      String?
   invoiceNumber   String        @unique  // INV-2024-00001
-  status          String @default(DRAFT)
+  status          String @default("DRAFT")
   issueDate       DateTime      @default(now())
   dueDate         DateTime?
   subtotal        Int
@@ -859,7 +859,7 @@ model SyncQueue {
   payload      String     // JSON
   vectorClock  String     // JSON vector clock
   checksum     String?
-  status       String @default(PENDING)
+  status       String @default("PENDING")
   retryCount   Int        @default(0)
   lastError    String?
   createdAt    DateTime   @default(now())
