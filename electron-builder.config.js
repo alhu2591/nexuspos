@@ -21,22 +21,22 @@ const config = {
 
   // ── FILES to bundle into asar ───────────────────────────
   files: [
-    // Bundled main process (all deps inlined by esbuild, no node_modules needed)
+    // Bundled main process (all deps inlined by esbuild except native modules)
     'packages/main/dist/main.js',
     'packages/main/dist/preload.js',
     // Renderer
     'packages/renderer/dist/**',
-    // Prisma JS client (kept external from esbuild, must be in asar)
-    'node_modules/@prisma/client/**',
-    // Prisma native engine for target platform
+    // Prisma schema + generated client
     'packages/database/prisma/schema.prisma',
-    'node_modules/.prisma/**',
+    // All node_modules needed at runtime (native/external deps)
+    'node_modules/**',
+    // Exclude Prisma engines for other platforms (keep only current platform)
     '!node_modules/.prisma/client/libquery_engine-*',
     `node_modules/.prisma/client/libquery_engine-\${os}-\${arch}*`,
-    // Electron-updater (kept external, needs node_modules)
-    'node_modules/electron-updater/**',
-    'node_modules/builder-util-runtime/**',
-    // Exclude noise
+    // Exclude dev-only and large unnecessary dirs
+    '!node_modules/electron/**',
+    '!node_modules/.bin/**',
+    '!node_modules/**/node_modules/electron/**',
     '!**/*.ts',
     '!**/*.map',
     '!**/.git/**',
