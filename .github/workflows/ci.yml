@@ -148,7 +148,7 @@ jobs:
 
       - name: Build main process
         working-directory: packages/main
-        run: npx tsc
+        run: node build.mjs
 
       - name: Package Linux
         run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.config.js
@@ -215,7 +215,7 @@ jobs:
 
       - name: Build main process
         working-directory: packages/main
-        run: npx tsc
+        run: node build.mjs
         shell: bash
 
       - name: Package Windows
@@ -289,7 +289,7 @@ jobs:
 
       - name: Build main process
         working-directory: packages/main
-        run: npx tsc
+        run: node build.mjs
 
       - name: Package macOS
         run: npx electron-builder --mac dmg --publish never
