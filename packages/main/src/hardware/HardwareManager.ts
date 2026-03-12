@@ -272,7 +272,8 @@ export class EscPosPrinterAdapter implements ReceiptPrinterAdapter {
   async connect(): Promise<void> {
     try {
       if (this.config.connectionType === 'serial') {
-        const { SerialPort } = await import('serialport');
+        // @ts-ignore - serialport is optional
+        const { SerialPort } = await import('serialport').catch(() => ({ SerialPort: null }));
         this.port = new SerialPort({
           path: this.config.address,
           baudRate: this.config.baudRate ?? 9600,

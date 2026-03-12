@@ -2,7 +2,7 @@
   "name": "nexuspos",
   "version": "1.0.0",
   "private": true,
-  "description": "NexusPOS — Enterprise Point of Sale Platform",
+  "description": "NexusPOS \u2014 Enterprise Point of Sale Platform",
   "workspaces": [
     "packages/*"
   ],
@@ -20,14 +20,12 @@
     "db:migrate": "turbo run db:migrate",
     "db:seed": "turbo run db:seed",
     "clean": "turbo run clean && rimraf node_modules",
-    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
-    "prepare": "husky install"
+    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\""
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "electron": "^28.2.0",
     "electron-builder": "^24.9.1",
-    "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
     "prettier": "^3.2.0",
     "rimraf": "^5.0.5",

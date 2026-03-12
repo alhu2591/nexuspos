@@ -17,28 +17,28 @@ import { InventoryService } from './handlers/InventoryService';
 import { AuthService } from './handlers/AuthService';
 import { SettingsService } from './handlers/SettingsService';
 import { AppLogger } from '../utils/AppLogger';
-import { ErrorService } from '../utils/ErrorService';
+import { ErrorService } from '../utils/AppError';
 import { app } from 'electron';
 
 const logger = new AppLogger('IPC');
 
 export interface ServiceDependencies {
-  dbManager: DatabaseManager;
-  hardwareManager: HardwareManager;
-  printManager: PrintManager;
-  syncEngine: SyncEngine;
-  fiscalBus: FiscalEventBus;
+  db: DatabaseManager;
+  hardware: HardwareManager;
+  print: PrintManager;
+  sync: SyncEngine;
+  fiscal: FiscalEventBus;
 }
 
 // ============================================================
 // HANDLER WRAPPER
 // Validates, logs, and handles errors for all IPC calls
 // ============================================================
-function createHandler<T>(
+function createHandler(
   channel: string,
-  handler: (event: IpcMainInvokeEvent, payload: T) => Promise<unknown>
+  handler: (event: IpcMainInvokeEvent, payload: any) => Promise<unknown>
 ) {
-  return ipcMain.handle(channel, async (event: IpcMainInvokeEvent, payload: T) => {
+  return ipcMain.handle(channel, async (event: IpcMainInvokeEvent, payload: any) => {
     const start = Date.now();
     try {
       logger.debug(`IPC ${channel} called`);
@@ -75,15 +75,15 @@ function createHandler<T>(
 // ============================================================
 export function setupIpcHandlers(deps: ServiceDependencies): void {
   const {
-    dbManager,
-    hardwareManager,
-    printManager,
-    syncEngine,
-    fiscalBus,
+    db: dbManager,
+    hardware: hardwareManager,
+    print: printManager,
+    sync: syncEngine,
+    fiscal: fiscalBus,
   } = deps;
 
   // Initialize services
-  const authService = new AuthService(dbManager);
+  const authService = new AuthService(dbManager as any);
   const saleService = new SaleService(dbManager, fiscalBus, printManager, syncEngine);
   const productService = new ProductService(dbManager);
   const customerService = new CustomerService(dbManager);
@@ -146,9 +146,9 @@ export function setupIpcHandlers(deps: ServiceDependencies): void {
 
   // ── HARDWARE ─────────────────────────────────────────────
   createHandler('printer:print', (_, payload) => printManager.printJob(payload));
-  createHandler('printer:status', (_, _p) => hardwareManager.getPrinterStatuses());
+  createHandler('printer:status', async (_, _p) => hardwareManager.getPrinterStatuses());
   createHandler('printer:test', (_, payload) => printManager.testPrint(payload));
-  createHandler('hardware:status', (_, _p) => hardwareManager.getAllStatuses());
+  createHandler('hardware:status', async (_, _p) => hardwareManager.getAllStatuses());
   createHandler('drawer:open', (_, payload) => hardwareManager.openCashDrawer(payload));
 
   // ── SETTINGS ─────────────────────────────────────────────

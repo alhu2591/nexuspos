@@ -32,6 +32,12 @@ jobs:
       - name: Install dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
 
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./dev.db'
+
       - name: Type check (shared)
         working-directory: packages/shared
         run: npx tsc --noEmit
@@ -66,6 +72,12 @@ jobs:
 
       - name: Install dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./prod.db'
 
       - name: Build shared package
         working-directory: packages/shared
@@ -120,6 +132,12 @@ jobs:
           name: renderer-dist
           path: packages/renderer/dist/
 
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./prod.db'
+
       - name: Build shared + main
         run: |
           cd packages/shared && npx tsc
@@ -169,6 +187,12 @@ jobs:
         with:
           name: renderer-dist
           path: packages/renderer/dist/
+
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./prod.db'
 
       - name: Build shared + main
         run: |
@@ -230,6 +254,12 @@ jobs:
         with:
           name: renderer-dist
           path: packages/renderer/dist/
+
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./prod.db'
 
       - name: Build shared + main
         run: |

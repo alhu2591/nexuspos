@@ -58,7 +58,7 @@ export class SaleService {
       include: { taxRule: true },
     });
 
-    const productMap = new Map(products.map(p => [p.id, p]));
+    const productMap = new Map((products as any[]).map((p: any) => [p.id, p]));
 
     // 4. Validate all products exist and are active
     for (const line of payload.lines) {
