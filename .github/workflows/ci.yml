@@ -9,6 +9,7 @@ on:
 
 env:
   NODE_VERSION: '20.x'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # ────────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -68,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -117,7 +118,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
 
       - name: Install system dependencies
@@ -150,9 +151,13 @@ jobs:
         run: npx tsc
 
       - name: Package Linux
-        run: npx electron-builder --linux AppImage deb --publish never
+        run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.config.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List build output (debug)
+        if: always()
+        run: find dist-packages -type f 2>/dev/null || echo "dist-packages not found, checking dist/:" && find dist -maxdepth 3 -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
@@ -161,6 +166,9 @@ jobs:
           path: |
             dist-packages/*.AppImage
             dist-packages/*.deb
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: warn
           retention-days: 30
 
   # ────────────────────────────────────────────────────────
@@ -180,7 +188,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
 
       - name: Install dependencies
@@ -244,7 +252,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
 
       - name: Install dependencies
