@@ -219,12 +219,14 @@ jobs:
         shell: bash
 
       - name: Package Windows
-        run: npx electron-builder --windows nsis --publish never
+        shell: pwsh
+        run: |
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+          Remove-Item Env:WIN_CSC_LINK -ErrorAction SilentlyContinue
+          Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue
+          npx electron-builder --windows nsis --publish never --config electron-builder.config.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          WIN_CSC_LINK: ''
-          CSC_LINK: ''
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
