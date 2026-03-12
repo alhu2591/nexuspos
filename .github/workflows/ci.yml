@@ -37,6 +37,7 @@ jobs:
         run: npx prisma generate --no-engine
         env:
           DATABASE_URL: 'file:./dev.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
       - name: Type check (shared)
         working-directory: packages/shared
@@ -78,6 +79,7 @@ jobs:
         run: npx prisma generate --no-engine
         env:
           DATABASE_URL: 'file:./prod.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
       - name: Build shared package
         working-directory: packages/shared
@@ -137,6 +139,7 @@ jobs:
         run: npx prisma generate --no-engine
         env:
           DATABASE_URL: 'file:./prod.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
       - name: Build shared + main
         run: |
@@ -193,6 +196,7 @@ jobs:
         run: npx prisma generate --no-engine
         env:
           DATABASE_URL: 'file:./prod.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
       - name: Build shared + main
         run: |
@@ -260,6 +264,7 @@ jobs:
         run: npx prisma generate --no-engine
         env:
           DATABASE_URL: 'file:./prod.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
       - name: Build shared + main
         run: |

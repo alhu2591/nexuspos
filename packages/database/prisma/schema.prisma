@@ -3,9 +3,8 @@
 // Engine: SQLite with WAL mode
 
 generator client {
-  provider      = "prisma-client-js"
-  output        = "../node_modules/.prisma/client"
-  binaryTargets = ["native", "windows", "linux-musl", "darwin"]
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -77,7 +76,7 @@ model Device {
   branchId       String?
   name           String
   serialNumber   String?      @unique
-  deviceType     DeviceType   @default(POS_TERMINAL)
+  deviceType     String   @default(POS_TERMINAL)
   platformOS     String?
   appVersion     String?
   isActive       Boolean      @default(true)
@@ -100,13 +99,6 @@ model Device {
   @@index([serialNumber])
 }
 
-enum DeviceType {
-  POS_TERMINAL
-  CUSTOMER_DISPLAY
-  KITCHEN_DISPLAY
-  MANAGER_TERMINAL
-  MOBILE_POS
-}
 
 // ============================================================
 // USER MANAGEMENT & RBAC
@@ -205,7 +197,7 @@ model Product {
   unitPrice       Int             // Price in cents (avoid float errors)
   costPrice       Int?            // Cost in cents
   taxInclusive    Boolean         @default(true)
-  unit            ProductUnit     @default(PIECE)
+  unit            String     @default(PIECE)
   minStockLevel   Int?
   maxStockLevel   Int?
   isActive        Boolean         @default(true)
@@ -233,16 +225,6 @@ model Product {
   @@index([name])
 }
 
-enum ProductUnit {
-  PIECE
-  KG
-  GRAM
-  LITER
-  MILLILITER
-  METER
-  HOUR
-  DAY
-}
 
 model ProductVariant {
   id         String   @id @default(cuid())
@@ -250,7 +232,7 @@ model ProductVariant {
   sku        String?
   barcode    String?
   name       String
-  attributes Json     // { "size": "M", "color": "Red" }
+  attributes String     // { "size": "M", "color": "Red" }
   unitPrice  Int
   costPrice  Int?
   isActive   Boolean  @default(true)
@@ -302,7 +284,7 @@ model StockMovement {
   shiftId       String?
   saleId        String?
   userId        String?
-  movementType  StockMovementType
+  movementType  String
   quantity      Int               // Positive = in, Negative = out
   previousQty   Int
   newQty        Int
@@ -319,16 +301,6 @@ model StockMovement {
   @@index([createdAt])
 }
 
-enum StockMovementType {
-  SALE
-  RETURN
-  ADJUSTMENT
-  PURCHASE
-  WASTE
-  TRANSFER
-  INITIAL
-  COUNT_CORRECTION
-}
 
 // ============================================================
 // CUSTOMERS
@@ -379,7 +351,7 @@ model Sale {
   cashierId       String
   customerId      String?
   saleNumber      String        @unique  // POS-2024-00001
-  status          SaleStatus    @default(COMPLETED)
+  status          String    @default(COMPLETED)
   subtotal        Int           // Cents, before discounts
   discountAmount  Int           @default(0)
   taxAmount       Int           // Total VAT
@@ -417,14 +389,6 @@ model Sale {
   @@index([saleNumber])
 }
 
-enum SaleStatus {
-  PENDING
-  COMPLETED
-  VOIDED
-  REFUNDED
-  PARTIALLY_REFUNDED
-  ON_HOLD
-}
 
 model SaleLine {
   id             String    @id @default(cuid())
@@ -474,7 +438,7 @@ model TaxBreakdown {
 model Payment {
   id             String        @id @default(cuid())
   saleId         String
-  paymentMethod  PaymentMethod
+  paymentMethod  String
   amount         Int           // Cents
   tendered       Int?          // Cash tendered
   change         Int?          // Change given
@@ -482,7 +446,7 @@ model Payment {
   cardLast4      String?
   cardBrand      String?
   processorRef   String?       // Payment terminal reference
-  status         PaymentStatus @default(COMPLETED)
+  status         String @default(COMPLETED)
   processedAt    DateTime      @default(now())
   failureReason  String?
 
@@ -494,27 +458,7 @@ model Payment {
   @@index([paymentMethod])
 }
 
-enum PaymentMethod {
-  CASH
-  CARD_CREDIT
-  CARD_DEBIT
-  CONTACTLESS
-  VOUCHER
-  GIFT_CARD
-  BANK_TRANSFER
-  CRYPTO
-  SPLIT
-  ACCOUNT       // Customer account/credit
-}
 
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
-  REFUNDED
-  PARTIALLY_REFUNDED
-}
 
 // ============================================================
 // REFUNDS
@@ -528,8 +472,8 @@ model Refund {
   refundNumber  String       @unique
   amount        Int
   reason        String
-  refundMethod  PaymentMethod
-  status        RefundStatus @default(COMPLETED)
+  refundMethod  String
+  status        String @default(COMPLETED)
   isPartial     Boolean      @default(false)
   notes         String?
   createdAt     DateTime     @default(now())
@@ -542,12 +486,6 @@ model Refund {
   @@index([createdAt])
 }
 
-enum RefundStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
 
 model RefundLine {
   id         String  @id @default(cuid())
@@ -572,9 +510,9 @@ model DiscountRule {
   storeId         String
   name            String
   description     String?
-  discountType    DiscountType
+  discountType    String
   value           Int              // Cents (for FIXED) or percentage × 100
-  scope           DiscountScope    @default(CART)
+  scope           String    @default(CART)
   categoryId      String?
   productId       String?
   minAmount       Int?             // Min cart total (cents)
@@ -597,26 +535,14 @@ model DiscountRule {
   @@index([couponCode])
 }
 
-enum DiscountType {
-  PERCENTAGE
-  FIXED_AMOUNT
-  BUY_X_GET_Y
-  BUNDLE
-}
 
-enum DiscountScope {
-  CART
-  LINE_ITEM
-  CATEGORY
-  PRODUCT
-}
 
 model AppliedDiscount {
   id             String       @id @default(cuid())
   saleId         String
   discountRuleId String?
   name           String       // Snapshot
-  discountType   DiscountType
+  discountType   String
   value          Int
   amount         Int          // Actual discount amount applied
 
@@ -660,7 +586,7 @@ model Shift {
   deviceId        String
   userId          String
   shiftNumber     String        @unique
-  status          ShiftStatus   @default(OPEN)
+  status          String   @default(OPEN)
   openingBalance  Int           @default(0)  // Cents
   closingBalance  Int?
   expectedBalance Int?
@@ -684,11 +610,6 @@ model Shift {
   @@index([openedAt])
 }
 
-enum ShiftStatus {
-  OPEN
-  CLOSED
-  SUSPENDED
-}
 
 model ShiftSummary {
   id               String  @id @default(cuid())
@@ -713,7 +634,7 @@ model CashMovement {
   shiftId      String
   deviceId     String
   userId       String?
-  movementType CashMovementType
+  movementType String
   amount       Int               // Cents
   reason       String?
   notes        String?
@@ -727,14 +648,6 @@ model CashMovement {
   @@index([createdAt])
 }
 
-enum CashMovementType {
-  OPENING
-  CASH_IN
-  CASH_OUT
-  SALE
-  REFUND
-  CLOSING
-}
 
 // ============================================================
 // RECEIPTS & INVOICES
@@ -765,7 +678,7 @@ model Invoice {
   customerId      String
   templateId      String?
   invoiceNumber   String        @unique  // INV-2024-00001
-  status          InvoiceStatus @default(DRAFT)
+  status          String @default(DRAFT)
   issueDate       DateTime      @default(now())
   dueDate         DateTime?
   subtotal        Int
@@ -793,15 +706,6 @@ model Invoice {
   @@index([invoiceNumber])
 }
 
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  PAID
-  PARTIALLY_PAID
-  OVERDUE
-  CANCELLED
-  VOID
-}
 
 model InvoiceLine {
   id          String  @id @default(cuid())
@@ -870,7 +774,7 @@ model PrinterConfig {
   id           String      @id @default(cuid())
   deviceId     String
   name         String
-  printerType  PrinterType
+  printerType  String
   connectionType String    // "usb", "serial", "network", "bluetooth"
   address      String?     // IP:port or COM port or USB path
   baudRate     Int?
@@ -886,12 +790,6 @@ model PrinterConfig {
   @@index([deviceId])
 }
 
-enum PrinterType {
-  RECEIPT
-  INVOICE
-  LABEL
-  KITCHEN
-}
 
 model DeviceConfig {
   id                   String    @id @default(cuid())
@@ -957,11 +855,11 @@ model SyncQueue {
   deviceId     String
   entityType   String     // "Sale", "Product", "Inventory", etc.
   entityId     String
-  operation    SyncOp
+  operation    String
   payload      String     // JSON
   vectorClock  String     // JSON vector clock
   checksum     String?
-  status       SyncStatus @default(PENDING)
+  status       String @default(PENDING)
   retryCount   Int        @default(0)
   lastError    String?
   createdAt    DateTime   @default(now())
@@ -975,21 +873,7 @@ model SyncQueue {
   @@index([createdAt])
 }
 
-enum SyncOp {
-  CREATE
-  UPDATE
-  DELETE
-  VOID
-}
 
-enum SyncStatus {
-  PENDING
-  PROCESSING
-  SYNCED
-  CONFLICT
-  FAILED
-  SKIPPED
-}
 
 // ============================================================
 // FISCAL EVENTS (GoBD / KassenSichV)

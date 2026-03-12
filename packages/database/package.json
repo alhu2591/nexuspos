@@ -3,20 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "db:generate": "prisma generate",
+    "db:generate": "prisma generate --no-engine",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "tsx src/seed.ts",
     "db:studio": "prisma studio",
-    "build": "prisma generate",
+    "build": "prisma generate --no-engine",
     "clean": "rimraf node_modules/.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^5.8.0"
+    "@prisma/client": "5.22.0"
   },
   "devDependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
-    "prisma": "^5.8.0",
+    "prisma": "5.22.0",
     "rimraf": "^5.0.5",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
