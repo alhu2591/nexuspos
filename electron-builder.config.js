@@ -70,6 +70,7 @@ const config = {
     depends: ['libgtk-3-0', 'libnotify4', 'libnss3', 'libxss1', 'libxtst6', 'xdg-utils', 'libatspi2.0-0', 'libgbm1'],
     packageCategory: 'misc',
     priority: 'optional',
+    maintainer: 'NexusPOS <support@nexuspos.io>',
   },
 
   // ── MACOS ───────────────────────────────────────────────

@@ -2,7 +2,7 @@
   "name": "nexuspos",
   "version": "1.0.0",
   "private": true,
-  "description": "NexusPOS \u2014 Enterprise Point of Sale Platform",
+  "description": "Enterprise Point of Sale Platform",
   "workspaces": [
     "packages/*"
   ],
@@ -45,5 +45,10 @@
       "prettier --write"
     ]
   },
-  "main": "packages/main/dist/main.js"
+  "main": "packages/main/dist/main.js",
+  "author": {
+    "name": "NexusPOS",
+    "email": "support@nexuspos.io"
+  },
+  "license": "MIT"
 }
