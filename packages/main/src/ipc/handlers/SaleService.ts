@@ -16,8 +16,8 @@ import {
   type CreateSaleInput,
   type VoidSaleInput,
   type RefundInput,
-} from '../../../../shared/src/schemas';
-import { VATEngine, calculateCartTotals } from '../../../../shared/src/utils/vatEngine';
+} from '@nexuspos/shared';
+import { VATEngine, calculateCartTotals } from '@nexuspos/shared';
 import { AppLogger } from '../../utils/AppLogger';
 import { AppError } from '../../utils/AppError';
 

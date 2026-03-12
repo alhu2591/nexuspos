@@ -4,7 +4,7 @@
 // No direct Node.js access is exposed to renderer
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { IPCChannel } from '../../shared/src/types';
+import type { IPCChannel } from '@nexuspos/shared';
 
 // ============================================================
 // SECURITY: Whitelist of allowed IPC channels

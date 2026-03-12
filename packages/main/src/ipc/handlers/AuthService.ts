@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import * as crypto from 'node:crypto';
 import type { DatabaseManager } from '../../database/DatabaseManager';
-import { LoginSchema, LoginPinSchema } from '../../../../shared/src/schemas';
+import { LoginSchema, LoginPinSchema } from '@nexuspos/shared';
 import { AppError } from '../../utils/AppError';
 import { AppLogger } from '../../utils/AppLogger';
 

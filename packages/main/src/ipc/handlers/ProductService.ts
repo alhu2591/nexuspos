@@ -3,7 +3,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import type { DatabaseManager } from '../../database/DatabaseManager';
-import { CreateProductSchema, UpdateProductSchema, ProductSearchSchema, ProductBarcodeSchema } from '../../../../shared/src/schemas';
+import { CreateProductSchema, UpdateProductSchema, ProductSearchSchema, ProductBarcodeSchema } from '@nexuspos/shared';
 import { AppError } from '../../utils/AppError';
 import { AppLogger } from '../../utils/AppLogger';
 

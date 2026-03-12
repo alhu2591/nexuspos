@@ -141,10 +141,13 @@ jobs:
           DATABASE_URL: 'file:./prod.db'
           PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
-      - name: Build shared + main
-        run: |
-          cd packages/shared && npx tsc
-          cd ../main && npx tsc
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npx tsc
+
+      - name: Build main process
+        working-directory: packages/main
+        run: npx tsc
 
       - name: Package Linux
         run: npx electron-builder --linux AppImage deb --publish never
@@ -198,10 +201,13 @@ jobs:
           DATABASE_URL: 'file:./prod.db'
           PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
-      - name: Build shared + main
-        run: |
-          cd packages/shared && npx tsc
-          cd ../main && npx tsc
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npx tsc
+
+      - name: Build main process
+        working-directory: packages/main
+        run: npx tsc
         shell: bash
 
       - name: Package Windows
@@ -266,10 +272,13 @@ jobs:
           DATABASE_URL: 'file:./prod.db'
           PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
-      - name: Build shared + main
-        run: |
-          cd packages/shared && npx tsc
-          cd ../main && npx tsc
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npx tsc
+
+      - name: Build main process
+        working-directory: packages/main
+        run: npx tsc
 
       - name: Package macOS
         run: npx electron-builder --mac dmg --publish never

@@ -2,9 +2,9 @@
 // Converts sale data into formatted printer lines
 // Supports both thermal (ESC/POS) and digital receipts
 
-import type { ISale, ISaleLine, IPayment, ITaxBreakdownItem } from '../../../shared/src/types';
+import type { ISale, ISaleLine, IPayment, ITaxBreakdownItem } from '@nexuspos/shared';
 import type { PrinterLine } from '../hardware/HardwareManager';
-import { formatCents, formatRatePercentage } from '../../../shared/src/utils/vatEngine';
+import { formatCents, formatRatePercentage } from '@nexuspos/shared';
 
 export interface ReceiptConfig {
   storeName: string;

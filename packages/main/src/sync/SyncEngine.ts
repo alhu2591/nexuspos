@@ -8,7 +8,7 @@ import * as dgram from 'node:dgram';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import type { DatabaseManager } from '../database/DatabaseManager';
-import type { ISyncEvent, ISyncStatus } from '../../../shared/src/types';
+import type { ISyncEvent, ISyncStatus } from '@nexuspos/shared';
 import { AppLogger } from '../utils/AppLogger';
 import { createHash } from 'node:crypto';
 

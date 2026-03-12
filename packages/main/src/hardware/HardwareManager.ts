@@ -3,7 +3,7 @@
 // Pure interface definitions + concrete implementations
 
 import { EventEmitter } from 'node:events';
-import type { IHardwareStatus, IPrintJob, IPrintResult } from '../../../shared/src/types';
+import type { IHardwareStatus, IPrintJob, IPrintResult } from '@nexuspos/shared';
 import { AppLogger } from '../utils/AppLogger';
 
 const logger = new AppLogger('Hardware');

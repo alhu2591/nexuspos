@@ -2,7 +2,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createId } from '@paralleldrive/cuid2';
 import type { DatabaseManager } from '../../database/DatabaseManager';
-import { OpenShiftSchema, CloseShiftSchema, CashMovementSchema } from '../../../../shared/src/schemas';
+import { OpenShiftSchema, CloseShiftSchema, CashMovementSchema } from '@nexuspos/shared';
 import { AppError } from '../../utils/AppError';
 import { AppLogger } from '../../utils/AppLogger';
 
@@ -173,7 +173,7 @@ export class CustomerService {
   }
 
   async createCustomer(rawPayload: unknown) {
-    const { CreateCustomerSchema } = await import('../../../../shared/src/schemas');
+    const { CreateCustomerSchema } = await import('@nexuspos/shared');
     const payload = CreateCustomerSchema.parse(rawPayload);
     const count = await this.db.customer.count({ where: { storeId: payload.storeId } });
     return this.db.customer.create({
@@ -203,7 +203,7 @@ export class InventoryService {
   }
 
   async adjustInventory(rawPayload: unknown) {
-    const { AdjustInventorySchema } = await import('../../../../shared/src/schemas');
+    const { AdjustInventorySchema } = await import('@nexuspos/shared');
     const payload = AdjustInventorySchema.parse(rawPayload);
 
     const current = await this.db.inventoryItem.findUnique({ where: { productId: payload.productId } });
@@ -326,7 +326,7 @@ export class SettingsService {
   }
 
   async setSetting(rawPayload: unknown) {
-    const { SetSettingSchema } = await import('../../../../shared/src/schemas');
+    const { SetSettingSchema } = await import('@nexuspos/shared');
     const payload = SetSettingSchema.parse(rawPayload);
     return this.db.storeSetting.upsert({
       where: { storeId_key: { storeId: payload.storeId, key: payload.key } },
