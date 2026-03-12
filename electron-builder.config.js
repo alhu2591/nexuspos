@@ -38,6 +38,8 @@ const config = {
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     requestedExecutionLevel: 'asInvoker',
+    signingHashAlgorithms: null,
+    sign: null,
   },
 
   nsis: {
