@@ -68,3 +68,8 @@ temp/
 *.p12
 *.pfx
 build-resources/installer.nsh
+
+# Shared package compiled output (in src/ from previous tsconfig)
+packages/shared/src/**/*.js
+packages/shared/src/**/*.d.ts
+packages/shared/src/**/*.map
