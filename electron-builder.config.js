@@ -26,7 +26,9 @@ const config = {
     'packages/main/dist/preload.js',
     // Renderer
     'packages/renderer/dist/**',
-    // Prisma schema + native client for target platform
+    // Prisma JS client (kept external from esbuild, must be in asar)
+    'node_modules/@prisma/client/**',
+    // Prisma native engine for target platform
     'packages/database/prisma/schema.prisma',
     'node_modules/.prisma/**',
     '!node_modules/.prisma/client/libquery_engine-*',
