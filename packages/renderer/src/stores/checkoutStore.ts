@@ -6,9 +6,9 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createId } from '@paralleldrive/cuid2';
 import type { IProduct, ICartLine, ICartTotals, ICustomer, IDiscountRule } from '@nexuspos/shared';
-import { calculateCartTotals } from '@nexuspos/shared';
-import { applyDiscounts } from '@nexuspos/shared';
+import { calculateCartTotals, applyDiscounts } from '@nexuspos/shared';
 import { ipcService } from '../services/ipcService';
+import { useSettingsStore } from './settingsStore';
 
 // ============================================================
 // STATE TYPES
@@ -42,37 +42,30 @@ export interface HeldCart {
 // ============================================================
 
 export interface CartActions {
-  // Cart line operations
   addProduct: (product: IProduct, quantity?: number) => void;
   removeItem: (lineId: string) => void;
   updateQuantity: (lineId: string, quantity: number) => void;
   updateLineDiscount: (lineId: string, discountAmount: number) => void;
   addLineNote: (lineId: string, note: string) => void;
 
-  // Customer
   setCustomer: (customer: ICustomer | null) => void;
 
-  // Discounts
   applyDiscount: (rule: IDiscountRule) => void;
   applyCoupon: (code: string) => Promise<boolean>;
   removeDiscount: () => void;
 
-  // Cart management
   clearCart: () => void;
   setNotes: (notes: string) => void;
 
-  // Hold / Retrieve
   holdCart: (label?: string) => void;
   retrieveHeldCart: (heldId: string) => void;
   deleteHeldCart: (heldId: string) => void;
 
-  // Checkout flow
   goToPayment: () => void;
   goToCart: () => void;
   completeCheckout: (payments: PaymentInput[]) => Promise<{ saleId: string }>;
   newSale: () => void;
 
-  // Internal
   recalculateTotals: () => void;
 }
 
@@ -95,10 +88,6 @@ const EMPTY_TOTALS: ICartTotals = {
   totalAmount: 0,
   taxBreakdown: [],
 };
-
-// ============================================================
-// INITIAL STATE
-// ============================================================
 
 const initialState: CartState = {
   lines: [],
@@ -124,38 +113,43 @@ export const useCheckoutStore = create<CartState & CartActions>()(
     // ── ADD PRODUCT ────────────────────────────────────────
     addProduct: (product: IProduct, quantity = 1) => {
       set((state) => {
-        // Check if same product already in cart (merge lines)
         const existingLineIndex = state.lines.findIndex(
           (l) => l.productId === product.id && !l.variantId && !l.notes
         );
 
         if (existingLineIndex >= 0) {
-          // Increment quantity
           const line = state.lines[existingLineIndex];
+          const prevTotal = line.lineTotal;
           line.quantity += quantity * 1000;
-          // Recalculate line total
           const newTotal = Math.round((line.unitPrice * line.quantity) / 1000);
-          const discountFraction = line.discountAmount / line.lineTotal;
+          // Preserve proportional discount when merging
+          const discountRate = prevTotal > 0 ? line.discountAmount / prevTotal : 0;
           line.lineTotal = newTotal;
-          line.discountAmount = Math.round(newTotal * discountFraction);
+          line.discountAmount = Math.round(newTotal * discountRate);
+          // Recalculate tax
+          if (line.taxRate > 0) {
+            const discountedTotal = newTotal - line.discountAmount;
+            if (line.taxInclusive) {
+              const rate = line.taxRate / 10000;
+              line.taxAmount = discountedTotal - Math.round(discountedTotal / (1 + rate));
+            } else {
+              line.taxAmount = Math.round(discountedTotal * (line.taxRate / 10000));
+            }
+          }
         } else {
-          // Add new line
           const taxRate = product.taxRule?.rate ?? 0;
           const taxInclusive = product.taxInclusive;
           const unitPrice = product.unitPrice;
           const qty = quantity * 1000;
           const lineTotal = Math.round((unitPrice * qty) / 1000);
 
-          // Calculate tax on line total
           let taxAmount = 0;
           if (taxRate > 0) {
             if (taxInclusive) {
               const rate = taxRate / 10000;
-              const net = Math.round(lineTotal / (1 + rate));
-              taxAmount = lineTotal - net;
+              taxAmount = lineTotal - Math.round(lineTotal / (1 + rate));
             } else {
-              const rate = taxRate / 10000;
-              taxAmount = Math.round(lineTotal * rate);
+              taxAmount = Math.round(lineTotal * (taxRate / 10000));
             }
           }
 
@@ -203,23 +197,20 @@ export const useCheckoutStore = create<CartState & CartActions>()(
         line.quantity = qty;
         const lineTotal = Math.round((line.unitPrice * qty) / 1000);
 
-        // Recalculate tax
         let taxAmount = 0;
         if (line.taxRate > 0) {
           if (line.taxInclusive) {
             const rate = line.taxRate / 10000;
-            const net = Math.round(lineTotal / (1 + rate));
-            taxAmount = lineTotal - net;
+            taxAmount = lineTotal - Math.round(lineTotal / (1 + rate));
           } else {
-            const rate = line.taxRate / 10000;
-            taxAmount = Math.round(lineTotal * rate);
+            taxAmount = Math.round(lineTotal * (line.taxRate / 10000));
           }
         }
 
+        // Preserve proportional discount on quantity change
+        const discountRate = line.lineTotal > 0 ? line.discountAmount / line.lineTotal : 0;
         line.lineTotal = lineTotal;
         line.taxAmount = taxAmount;
-        // Proportional discount adjustment
-        const discountRate = line.discountAmount / (line.lineTotal || 1);
         line.discountAmount = Math.round(lineTotal * discountRate);
       });
 
@@ -231,7 +222,7 @@ export const useCheckoutStore = create<CartState & CartActions>()(
       set((state) => {
         const line = state.lines.find((l) => l.id === lineId);
         if (!line) return;
-        line.discountAmount = Math.min(discountAmount, line.lineTotal);
+        line.discountAmount = Math.min(Math.max(0, discountAmount), line.lineTotal);
       });
       get().recalculateTotals();
     },
@@ -256,9 +247,11 @@ export const useCheckoutStore = create<CartState & CartActions>()(
     },
 
     applyCoupon: async (code: string) => {
-      const result = await ipcService.invoke('settings:get', { key: `coupon:${code}` });
+      // Look up coupon code from settings
+      const { storeId } = useSettingsStore.getState();
+      if (!storeId) return false;
+      const result = await ipcService.invoke('settings:get', { key: `coupon:${code}`, storeId });
       if (result.success && result.data) {
-        // TODO: validate and apply coupon rule
         set((state) => { state.couponCode = code; });
         return true;
       }
@@ -269,7 +262,6 @@ export const useCheckoutStore = create<CartState & CartActions>()(
       set((state) => {
         state.appliedDiscount = null;
         state.couponCode = null;
-        // Reset line discounts from rules (keep manual discounts)
         state.lines.forEach((l) => { l.discountAmount = 0; });
       });
       get().recalculateTotals();
@@ -315,19 +307,18 @@ export const useCheckoutStore = create<CartState & CartActions>()(
     },
 
     retrieveHeldCart: (heldId) => {
-      const { lines: currentLines } = get();
+      const { lines: currentLines, customer: currentCustomer } = get();
 
       set((state) => {
         const held = state.heldCarts.find((h) => h.id === heldId);
         if (!held) return;
 
-        // If current cart has items, push to held
         if (currentLines.length > 0) {
           state.heldCarts.push({
             id: createId(),
             label: 'Auto-hold',
             lines: [...currentLines],
-            customer: state.customer,
+            customer: currentCustomer,
             heldAt: new Date(),
           });
         }
@@ -360,12 +351,26 @@ export const useCheckoutStore = create<CartState & CartActions>()(
       set((s) => { s.isProcessing = true; });
 
       try {
-        const sessionResult = await ipcService.invoke('auth:session', {});
-        const session = sessionResult.data as { deviceId: string; userId: string; storeId: string } | null;
+        // Get real device/store IDs from settingsStore (loaded on app startup)
+        const settings = useSettingsStore.getState();
+        const deviceId = settings.deviceId;
+        const storeId = settings.storeId;
 
-        const shiftResult = await ipcService.invoke('shift:current', {
-          deviceId: session?.deviceId,
-        });
+        if (!deviceId || !storeId) {
+          throw new Error('Device not initialized. Please restart the application.');
+        }
+
+        // Get session for cashier ID
+        const sessionResult = await ipcService.invoke<{ userId: string }>('auth:session', {});
+        const session = sessionResult.data as { userId: string; user?: { id: string } } | null;
+        const cashierId = session?.userId ?? (session as any)?.user?.id;
+
+        if (!cashierId) {
+          throw new Error('No active session. Please log in again.');
+        }
+
+        // Get current shift
+        const shiftResult = await ipcService.invoke<{ id: string }>('shift:current', { deviceId });
         const shift = shiftResult.data as { id: string } | null;
 
         if (!shift) {
@@ -373,10 +378,10 @@ export const useCheckoutStore = create<CartState & CartActions>()(
         }
 
         const saleData = {
-          deviceId: session?.deviceId,
+          deviceId,
           shiftId: shift.id,
-          cashierId: session?.userId,
-          storeId: session?.storeId,
+          cashierId,
+          storeId,
           customerId: state.customer?.id,
           lines: state.lines.map((l) => ({
             productId: l.productId,
@@ -389,13 +394,13 @@ export const useCheckoutStore = create<CartState & CartActions>()(
           notes: state.notes || undefined,
         };
 
-        const result = await ipcService.invoke('sale:create', saleData);
+        const result = await ipcService.invoke<{ id: string }>('sale:create', saleData);
 
         if (!result.success) {
           throw new Error(result.error?.message ?? 'Checkout failed');
         }
 
-        const saleId = (result.data as { id: string }).id;
+        const saleId = result.data!.id;
 
         set((s) => {
           s.lastCompletedSaleId = saleId;
@@ -423,17 +428,11 @@ export const useCheckoutStore = create<CartState & CartActions>()(
         return;
       }
 
-      // Apply discount rules
       const cartTotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
       const cartQty = lines.reduce((sum, l) => sum + l.quantity / 1000, 0);
 
       if (appliedDiscount) {
-        const { lineDiscounts } = applyDiscounts(
-          lines,
-          [appliedDiscount],
-          cartTotal,
-          cartQty
-        );
+        const { lineDiscounts } = applyDiscounts(lines, [appliedDiscount], cartTotal, cartQty);
 
         set((state) => {
           state.lines.forEach((line) => {
@@ -442,22 +441,25 @@ export const useCheckoutStore = create<CartState & CartActions>()(
 
             // Recalculate tax on discounted amount
             const discountedTotal = line.lineTotal - discount;
-            if (line.taxRate > 0 && line.taxInclusive) {
-              const rate = line.taxRate / 10000;
-              line.taxAmount = discountedTotal - Math.round(discountedTotal / (1 + rate));
+            if (line.taxRate > 0) {
+              if (line.taxInclusive) {
+                const rate = line.taxRate / 10000;
+                line.taxAmount = discountedTotal - Math.round(discountedTotal / (1 + rate));
+              } else {
+                line.taxAmount = Math.round(discountedTotal * (line.taxRate / 10000));
+              }
             }
           });
         });
       }
 
-      // Calculate final totals
       const updatedLines = get().lines;
       const totalsInput = updatedLines.map((l) => ({
         quantity: l.quantity,
         unitPrice: l.unitPrice,
         discountAmount: l.discountAmount,
         taxRate: l.taxRate,
-        taxClass: 'standard',
+        taxClass: l.product?.taxRule?.taxClass ?? 'standard',
         taxInclusive: l.taxInclusive,
       }));
 

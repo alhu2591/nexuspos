@@ -12,10 +12,9 @@ import { ReceiptModal } from '../components/ReceiptModal';
 import { CustomerSelector } from '../components/CustomerSelector';
 import { DiscountModal } from '../components/DiscountModal';
 import { HeldCartsPanel } from '../components/HeldCartsPanel';
-import { NumPad } from '../../../components/ui/NumPad';
 import { useHardwareEvents } from '../../../hooks/useHardwareEvents';
 import { useBarcodeScanner } from '../../../hooks/useBarcodeScanner';
-import { formatCents } from '../../../../../shared/src/utils/vatEngine';
+import { formatCents } from '@nexuspos/shared';
 import {
   ShoppingCart,
   Search,

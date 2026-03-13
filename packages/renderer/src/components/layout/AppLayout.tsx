@@ -5,7 +5,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { formatCents } from '../../../../shared/src/utils/vatEngine';
+import { formatCents } from '@nexuspos/shared';
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Warehouse,
   Users, Receipt, FileText, ArrowLeftRight, BarChart2,

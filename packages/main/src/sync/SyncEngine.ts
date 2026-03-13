@@ -537,8 +537,8 @@ export class SyncEngine extends EventEmitter {
   async shutdown(): Promise<void> {
     this.isRunning = false;
 
-    // Announce goodbye
-    if (this.discoverySocket) {
+    // Announce goodbye to peers
+    if (this.discoverySocket && this.isRunning) {
       const byeMsg = JSON.stringify({
         type: 'BYE',
         deviceId: this.deviceId,
@@ -546,7 +546,20 @@ export class SyncEngine extends EventEmitter {
         appVersion: '1.0.0',
         storeId: this.storeId,
       } satisfies DiscoveryMessage);
-      try { this.broadcastPresence(); } catch {}
+      const buf = Buffer.from(byeMsg);
+      try {
+        const ifaces = os.networkInterfaces();
+        for (const iface of Object.values(ifaces)) {
+          for (const addr of iface ?? []) {
+            if (addr.family === 'IPv4' && !addr.internal) {
+              const parts = addr.address.split('.');
+              parts[3] = '255';
+              const broadcast = parts.join('.');
+              this.discoverySocket.send(buf, 0, buf.length, DISCOVERY_PORT, broadcast);
+            }
+          }
+        }
+      } catch { /* ignore errors during shutdown */ }
     }
 
     if (this.discoveryTimer) clearInterval(this.discoveryTimer);

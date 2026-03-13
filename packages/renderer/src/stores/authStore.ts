@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthSession } from '@nexuspos/shared';
 import { authAPI } from '../services/ipcService';
+import { useSettingsStore } from './settingsStore';
 
 interface AuthState {
   session: AuthSession | null;
@@ -43,8 +44,11 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       login: async (username, password) => {
         set({ isLoading: true, error: null });
         try {
-          const deviceId = window.platform?.os ?? 'browser-dev';
-          const result = await authAPI.login(username, password, deviceId);
+          // Use the real database device ID (not the OS platform string)
+          const { deviceId } = useSettingsStore.getState();
+          const effectiveDeviceId = deviceId ?? window.platform?.os ?? 'dev';
+
+          const result = await authAPI.login(username, password, effectiveDeviceId);
           if (result.success && result.data) {
             set({ session: result.data as AuthSession, isLoading: false });
           } else {
@@ -58,8 +62,10 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       loginPin: async (pin) => {
         set({ isLoading: true, error: null });
         try {
-          const deviceId = window.platform?.os ?? 'browser-dev';
-          const result = await authAPI.loginPin(pin, deviceId);
+          const { deviceId } = useSettingsStore.getState();
+          const effectiveDeviceId = deviceId ?? window.platform?.os ?? 'dev';
+
+          const result = await authAPI.loginPin(pin, effectiveDeviceId);
           if (result.success && result.data) {
             set({ session: result.data as AuthSession, isLoading: false });
           } else {

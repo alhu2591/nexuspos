@@ -64,9 +64,11 @@ const ALLOWED_CHANNELS: Set<IPCChannel> = new Set([
   // Settings
   'settings:get',
   'settings:set',
+  'settings:getAll',
   'settings:device',
   // System
   'app:version',
+  'app:device',
   'app:restart',
   'db:backup',
   'sync:status',

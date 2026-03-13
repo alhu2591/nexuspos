@@ -2,7 +2,7 @@
 // Typed wrapper around window.nexuspos.invoke
 // All IPC calls go through this service
 
-import type { IPCChannel, Result, AppError } from '../../../shared/src/types';
+import type { IPCChannel } from '@nexuspos/shared';
 
 // ============================================================
 // IPC RESPONSE TYPE
@@ -58,8 +58,6 @@ class IPCService {
    */
   private async mockInvoke<T>(channel: IPCChannel, _payload: unknown): Promise<IPCResponse<T>> {
     console.debug(`[IPC Mock] ${channel}`, _payload);
-
-    // Return empty success for most calls in dev browser mode
     return { success: true, data: undefined as unknown as T };
   }
 }
@@ -68,7 +66,6 @@ export const ipcService = new IPCService();
 
 // ============================================================
 // TYPED DOMAIN SERVICE WRAPPERS
-// These provide a cleaner API for feature modules
 // ============================================================
 
 export const authAPI = {
@@ -185,16 +182,19 @@ export const settingsAPI = {
   get: (key: string, storeId: string) =>
     ipcService.invoke('settings:get', { key, storeId }),
 
-  set: (key: string, value: string, storeId: string) =>
-    ipcService.invoke('settings:set', { key, value, storeId }),
+  set: (key: string, value: string, storeId: string, dataType = 'string') =>
+    ipcService.invoke('settings:set', { key, value, storeId, dataType }),
+
+  getAll: (storeId: string) =>
+    ipcService.invoke('settings:getAll', { storeId }),
 
   getDevice: (deviceId: string) =>
     ipcService.invoke('settings:device', { deviceId }),
 };
 
 export const inventoryAPI = {
-  get: (productId: string) =>
-    ipcService.invoke('inventory:get', { productId }),
+  get: (productId?: string, lowStockOnly = false) =>
+    ipcService.invoke('inventory:get', { productId, lowStockOnly }),
 
   adjust: (data: unknown) =>
     ipcService.invoke('inventory:adjust', data),
@@ -211,6 +211,9 @@ export const paymentAPI = {
 export const systemAPI = {
   version: () =>
     ipcService.invoke('app:version', {}),
+
+  device: () =>
+    ipcService.invoke('app:device', {}),
 
   restart: () =>
     ipcService.invoke('app:restart', {}),

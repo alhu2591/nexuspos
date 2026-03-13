@@ -5,8 +5,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCheckoutStore } from '../store/checkoutStore';
-import { formatCents } from '../../../../../shared/src/utils/vatEngine';
-import type { ICartTotals } from '../../../../../shared/src/types';
+import { formatCents } from '@nexuspos/shared';
+import type { ICartTotals } from '@nexuspos/shared';
 import {
   ArrowLeft, Banknote, CreditCard, Smartphone, Ticket, Printer,
   CheckCircle2, AlertCircle, ChevronRight, Plus, Trash2

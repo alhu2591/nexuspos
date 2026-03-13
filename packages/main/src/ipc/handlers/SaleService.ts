@@ -325,10 +325,28 @@ export class SaleService {
       for (const line of sale.lines) {
         const product = await tx.product.findUnique({ where: { id: line.productId } });
         if (product && !product.isService) {
-          const qty = line.quantity / 1000;
+          const qty = Math.round(line.quantity / 1000);
+          const currentInv = await tx.inventoryItem.findUnique({
+            where: { productId: line.productId },
+          });
           await tx.inventoryItem.update({
             where: { productId: line.productId },
-            data: { quantity: { increment: Math.round(qty) } },
+            data: { quantity: { increment: qty } },
+          });
+          // Log stock movement for void (required for GoBD audit trail)
+          await tx.stockMovement.create({
+            data: {
+              id: createId(),
+              productId: line.productId,
+              saleId: payload.saleId,
+              userId: payload.userId,
+              movementType: 'RETURN',
+              quantity: qty,
+              previousQty: currentInv?.quantity ?? 0,
+              newQty: (currentInv?.quantity ?? 0) + qty,
+              reason: `Void: ${payload.reason}`,
+              reference: sale.saleNumber,
+            },
           });
         }
       }
@@ -375,8 +393,14 @@ export class SaleService {
       throw new AppError('SALE_VOIDED', 'Cannot refund a voided sale', false);
     }
 
-    // Validate refund amount
-    const maxRefundable = sale.totalAmount - (sale.refunds ? 0 : 0); // TODO: track prior refunds
+    // Calculate how much has already been refunded for this sale
+    const priorRefunds = await this.db.refund.aggregate({
+      where: { saleId: payload.saleId, status: 'COMPLETED' },
+      _sum: { amount: true },
+    });
+    const alreadyRefunded = priorRefunds._sum.amount ?? 0;
+    const maxRefundable = sale.totalAmount - alreadyRefunded;
+
     if (payload.amount > maxRefundable) {
       throw new AppError(
         'REFUND_EXCEEDS_MAX',

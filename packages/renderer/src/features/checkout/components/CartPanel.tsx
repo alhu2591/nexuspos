@@ -3,8 +3,8 @@
 
 import React, { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ICartLine } from '../../../../../shared/src/types';
-import { formatCents } from '../../../../../shared/src/utils/vatEngine';
+import type { ICartLine } from '@nexuspos/shared';
+import { formatCents } from '@nexuspos/shared';
 import { Trash2, Plus, Minus, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 

@@ -125,6 +125,7 @@ app.whenReady().then(async () => {
 
     // 4. Printing
     printManager = new PrintManager(hardwareManager);
+    await printManager.initialize();
     logger.info('Print manager ready');
 
     // 5. Sync

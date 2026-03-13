@@ -195,7 +195,7 @@ export interface IInventoryItem {
   productId: string;
   quantity: number;
   reservedQty: number;
-  availableQty: number; // computed: quantity - reservedQty
+  availableQty?: number; // computed client-side: quantity - reservedQty (not in DB)
   lastCountAt?: Date;
 }
 
@@ -547,9 +547,11 @@ export type IPCChannel =
   // Settings
   | 'settings:get'
   | 'settings:set'
+  | 'settings:getAll'
   | 'settings:device'
   // System
   | 'app:version'
+  | 'app:device'
   | 'app:restart'
   | 'db:backup'
   | 'sync:status'

@@ -7,8 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useAuthStore } from '../../../stores/authStore';
 import { productAPI } from '../../../services/ipcService';
-import { formatCents } from '../../../../../shared/src/utils/vatEngine';
-import type { IProduct, ICategory } from '../../../../../shared/src/types';
+import { formatCents } from '@nexuspos/shared';
+import type { IProduct, ICategory } from '@nexuspos/shared';
 import { Search, X, Grid3x3, List, Package, Tag } from 'lucide-react';
 import clsx from 'clsx';
 

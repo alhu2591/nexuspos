@@ -147,7 +147,34 @@ export function setupIpcHandlers(deps: ServiceDependencies): void {
   // ── SETTINGS ─────────────────────────────────────────────
   createHandler('settings:get',    (_, p) => settingsService.getSetting(p));
   createHandler('settings:set',    (_, p) => settingsService.setSetting(p));
+  createHandler('settings:getAll', (_, p) => settingsService.getAllSettings(p));
   createHandler('settings:device', (_, p) => settingsService.getDeviceConfig(p));
+
+  // ── DEVICE ───────────────────────────────────────────────
+  // Returns the current Device record from DB — used by renderer on startup
+  // to get the real database device ID (not the OS platform string)
+  createHandler('app:device', async () => {
+    const device = await dbManager.getCurrentDevice();
+    if (!device) return null;
+    return {
+      id: device.id,
+      name: device.name,
+      storeId: device.storeId,
+      branchId: (device as any).branchId ?? null,
+      deviceType: device.deviceType,
+      isPrimary: device.isPrimary,
+      store: (device as any).store
+        ? {
+            id: (device as any).store.id,
+            name: (device as any).store.name,
+            legalName: (device as any).store.legalName,
+            currency: (device as any).store.currency,
+            locale: (device as any).store.locale,
+            timezone: (device as any).store.timezone,
+          }
+        : null,
+    };
+  });
 
   // ── SYSTEM ───────────────────────────────────────────────
   createHandler('app:version', async () => ({
