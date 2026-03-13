@@ -624,6 +624,8 @@ model ShiftSummary {
   transactionCount Int
   itemCount        Int
   avgTransaction   Int
+  newCustomers     Int     @default(0)
+  returningCustomers Int   @default(0)
   createdAt        DateTime @default(now())
 
   shift            Shift   @relation(fields: [shiftId], references: [id])

@@ -36,7 +36,7 @@ export type LoginPinInput = z.infer<typeof LoginPinSchema>;
 // ============================================================
 
 export const ProductSearchSchema = z.object({
-  query: z.string().min(1).max(200),
+  query: z.string().max(200).optional().default(''),
   categoryId: z.string().optional(),
   storeId: z.string().min(1),
   limit: z.number().int().min(1).max(100).default(20),

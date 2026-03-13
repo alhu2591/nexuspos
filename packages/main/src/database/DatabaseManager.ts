@@ -58,19 +58,59 @@ export class DatabaseManager {
 
   private async runMigrations(): Promise<void> {
     try {
-      // Prisma migrate deploy runs migrations programmatically
-      const { execSync } = await import('node:child_process');
-      execSync('npx prisma migrate deploy', {
+      // Check whether DB tables already exist (idempotent guard)
+      const rows = await this._client!.$queryRaw<[{ cnt: bigint }]>`
+        SELECT COUNT(*) as cnt FROM sqlite_master
+        WHERE type='table' AND name NOT LIKE 'sqlite_%'
+      `;
+      const tableCount = Number(rows[0]?.cnt ?? 0);
+
+      if (tableCount >= 5) {
+        logger.info(`Database already initialized (${tableCount} tables found)`);
+        return;
+      }
+
+      logger.info('Fresh database detected — pushing schema...');
+      await this.pushSchema();
+      logger.info('Database schema created successfully');
+    } catch (err) {
+      logger.warn('Migration check failed — attempting schema push', err);
+      await this.pushSchema().catch(e => {
+        // Non-fatal for already-initialized databases; log and continue
+        logger.warn('Schema push skipped (tables may already exist)', e);
+      });
+    }
+  }
+
+  private async pushSchema(): Promise<void> {
+    const { execFileSync } = await import('node:child_process');
+    const isPackaged = app.isPackaged;
+
+    // Schema path: extraResources in prod, local workspace in dev
+    const schemaPath = isPackaged
+      ? path.join(process.resourcesPath, 'prisma', 'schema.prisma')
+      : path.join(process.cwd(), 'packages', 'database', 'prisma', 'schema.prisma');
+
+    // Prisma CLI entry point (extracted outside asar via extraResources)
+    const prismaCli = isPackaged
+      ? path.join(process.resourcesPath, 'prisma-cli', 'index.js')
+      : require.resolve('prisma/build/index.js');
+
+    // Use Electron's Node.js runtime via ELECTRON_RUN_AS_NODE=1
+    execFileSync(
+      process.execPath,
+      [prismaCli, 'db', 'push', '--schema', schemaPath, '--skip-generate', '--accept-data-loss'],
+      {
         env: {
           ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
           DATABASE_URL: `file:${this.dbPath}`,
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1',
         },
         stdio: 'pipe',
-      });
-      logger.info('Database migrations applied');
-    } catch (err) {
-      logger.warn('Migration via CLI failed — database may already be up to date', err);
-    }
+        timeout: 60_000,
+      }
+    );
   }
 
   async getCurrentDevice() {

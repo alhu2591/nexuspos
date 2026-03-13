@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthSession, IUser } from '../../../shared/src/types';
+import type { AuthSession } from '@nexuspos/shared';
 import { authAPI } from '../services/ipcService';
 
 interface AuthState {

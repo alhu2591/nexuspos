@@ -129,7 +129,6 @@ export class SaleService {
 
     // 7. Generate sale number
     const saleNumber = await this.generateSaleNumber(payload.storeId);
-    const refundNumber = await this.generateRefundNumber(payload.storeId);
 
     // 8. Build tax breakdown
     const taxBreakdownMap = new Map<number, { net: number; tax: number; gross: number; class: string }>();

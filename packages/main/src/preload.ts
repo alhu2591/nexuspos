@@ -169,6 +169,8 @@ const platform = {
   os: process.platform,
   version: process.versions.electron,
   arch: process.arch,
+  isKiosk: process.argv.includes('--kiosk') || process.env.KIOSK_MODE === '1',
+  isFullscreen: process.argv.includes('--kiosk'),
 };
 
 // ============================================================

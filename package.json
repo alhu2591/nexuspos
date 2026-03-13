@@ -20,7 +20,10 @@
     "db:migrate": "turbo run db:migrate",
     "db:seed": "turbo run db:seed",
     "clean": "turbo run clean && rimraf node_modules",
-    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\""
+    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
+    "package:kiosk": "electron-builder --config electron-builder.kiosk.js --linux",
+    "package:kiosk:x64": "electron-builder --config electron-builder.kiosk.js --linux --x64",
+    "package:kiosk:arm64": "electron-builder --config electron-builder.kiosk.js --linux --arm64"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

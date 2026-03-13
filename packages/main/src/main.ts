@@ -115,6 +115,7 @@ app.whenReady().then(async () => {
 
     // 2. Fiscal
     fiscalBus = new FiscalEventBus(dbManager);
+    await fiscalBus.initialize();          // ← required: sets isConfigured = true
     logger.info('Fiscal bus ready');
 
     // 3. Hardware

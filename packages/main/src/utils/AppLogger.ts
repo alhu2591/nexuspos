@@ -22,18 +22,3 @@ export class AppLogger {
   warn(msg: string, ...args: unknown[]) { this.log('warn', msg, ...args); }
   error(msg: string, ...args: unknown[]) { this.log('error', msg, ...args); }
 }
-
-export class ErrorService {
-  static normalize(error: unknown) {
-    if (error instanceof Error) {
-      return { code: 'ERROR', message: error.message, recoverable: true, stack: error.stack };
-    }
-    return { code: 'UNKNOWN', message: String(error), recoverable: true };
-  }
-  static capture(code: string, error: unknown, ctx?: unknown) {
-    console.error(`[ErrorService][${code}]`, error, ctx ?? '');
-  }
-  static fatal(code: string, error: unknown) {
-    console.error(`[FATAL][${code}]`, error);
-  }
-}

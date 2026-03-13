@@ -5,9 +5,9 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { createId } from '@paralleldrive/cuid2';
-import type { IProduct, ICartLine, ICartTotals, ICustomer, IDiscountRule } from '../../../shared/src/types';
-import { calculateCartTotals } from '../../../shared/src/utils/vatEngine';
-import { applyDiscounts } from '../../../shared/src/utils/discountEngine';
+import type { IProduct, ICartLine, ICartTotals, ICustomer, IDiscountRule } from '@nexuspos/shared';
+import { calculateCartTotals } from '@nexuspos/shared';
+import { applyDiscounts } from '@nexuspos/shared';
 import { ipcService } from '../services/ipcService';
 
 // ============================================================

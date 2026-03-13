@@ -92,6 +92,10 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Build main process (esbuild)
+        working-directory: packages/main
+        run: node build.mjs
+
       - name: Upload renderer build
         uses: actions/upload-artifact@v4
         with:
@@ -99,9 +103,15 @@ jobs:
           path: packages/renderer/dist/
           retention-days: 7
 
+      - name: Upload main process build
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-dist
+          path: packages/main/dist/
+          retention-days: 7
+
   # ────────────────────────────────────────────────────────
   # JOB 3: Package Linux (AppImage + deb)
-  # On tags or main branch push
   # ────────────────────────────────────────────────────────
   package-linux:
     name: Package Linux
@@ -129,11 +139,76 @@ jobs:
       - name: Install Node dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
 
+      - name: Generate Prisma types
+        working-directory: packages/database
+        run: npx prisma generate --no-engine
+        env:
+          DATABASE_URL: 'file:./prod.db'
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
+
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npx tsc
+
       - name: Download renderer build
         uses: actions/download-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
+
+      - name: Download main process build
+        uses: actions/download-artifact@v4
+        with:
+          name: main-dist
+          path: packages/main/dist/
+
+      - name: Package Linux (standard)
+        run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.config.js
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List build output
+        if: always()
+        run: find dist-packages -type f 2>/dev/null | head -20 || echo "No dist-packages found"
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist-packages/*.AppImage
+            dist-packages/*.deb
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────
+  # JOB 4: Package Linux Kiosk (AppImage + deb, kiosk mode)
+  # ────────────────────────────────────────────────────────
+  package-kiosk:
+    name: Package Linux Kiosk
+    needs: build
+    if: >
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y dpkg-dev fakeroot rpm
+
+      - name: Install Node dependencies
+        run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
 
       - name: Generate Prisma types
         working-directory: packages/database
@@ -146,34 +221,39 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Build main process
-        working-directory: packages/main
-        run: node build.mjs
+      - name: Download renderer build
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-dist
+          path: packages/renderer/dist/
 
-      - name: Package Linux
-        run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.config.js
+      - name: Download main process build
+        uses: actions/download-artifact@v4
+        with:
+          name: main-dist
+          path: packages/main/dist/
+
+      - name: Package Linux Kiosk
+        run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.kiosk.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List build output (debug)
+      - name: List kiosk build output
         if: always()
-        run: find dist-packages -type f 2>/dev/null || echo "dist-packages not found, checking dist/:" && find dist -maxdepth 3 -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20
+        run: find dist-packages/kiosk -type f 2>/dev/null | head -20 || echo "No kiosk packages found"
 
-      - name: Upload Linux packages
+      - name: Upload Kiosk packages
         uses: actions/upload-artifact@v4
         with:
-          name: linux-packages
+          name: kiosk-packages
           path: |
-            dist-packages/*.AppImage
-            dist-packages/*.deb
-            dist/*.AppImage
-            dist/*.deb
+            dist-packages/kiosk/*.AppImage
+            dist-packages/kiosk/*.deb
           if-no-files-found: warn
           retention-days: 30
 
   # ────────────────────────────────────────────────────────
-  # JOB 4: Package Windows (NSIS installer)
-  # Only on version tags
+  # JOB 5: Package Windows (NSIS installer)
   # ────────────────────────────────────────────────────────
   package-windows:
     name: Package Windows
@@ -196,12 +276,6 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
-      - name: Download renderer build
-        uses: actions/download-artifact@v4
-        with:
-          name: renderer-dist
-          path: packages/renderer/dist/
-
       - name: Generate Prisma types
         working-directory: packages/database
         run: npx prisma generate --no-engine
@@ -213,10 +287,17 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Build main process
-        working-directory: packages/main
-        run: node build.mjs
-        shell: bash
+      - name: Download renderer build
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-dist
+          path: packages/renderer/dist/
+
+      - name: Download main process build
+        uses: actions/download-artifact@v4
+        with:
+          name: main-dist
+          path: packages/main/dist/
 
       - name: Package Windows
         shell: pwsh
@@ -236,8 +317,7 @@ jobs:
           retention-days: 30
 
   # ────────────────────────────────────────────────────────
-  # JOB 5: Package macOS (DMG)
-  # Only on version tags — cert is optional via env check
+  # JOB 6: Package macOS (DMG)
   # ────────────────────────────────────────────────────────
   package-macos:
     name: Package macOS
@@ -270,12 +350,6 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      - name: Download renderer build
-        uses: actions/download-artifact@v4
-        with:
-          name: renderer-dist
-          path: packages/renderer/dist/
-
       - name: Generate Prisma types
         working-directory: packages/database
         run: npx prisma generate --no-engine
@@ -287,9 +361,17 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Build main process
-        working-directory: packages/main
-        run: node build.mjs
+      - name: Download renderer build
+        uses: actions/download-artifact@v4
+        with:
+          name: renderer-dist
+          path: packages/renderer/dist/
+
+      - name: Download main process build
+        uses: actions/download-artifact@v4
+        with:
+          name: main-dist
+          path: packages/main/dist/
 
       - name: Package macOS
         run: npx electron-builder --mac dmg --publish never
@@ -309,12 +391,12 @@ jobs:
           retention-days: 30
 
   # ────────────────────────────────────────────────────────
-  # JOB 6: GitHub Release
-  # Attaches all platform packages to the release
+  # JOB 7: GitHub Release
+  # Attaches all platform packages + kiosk packages to release
   # ────────────────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: [package-linux, package-windows, package-macos]
+    needs: [package-linux, package-kiosk, package-windows, package-macos]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -330,6 +412,9 @@ jobs:
           pattern: '*-packages'
           merge-multiple: true
 
+      - name: List release assets
+        run: find release-assets -type f | sort
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -337,5 +422,25 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          body: |
+            ## NexusPOS ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Windows  | `NexusPOS-Setup-*.exe` |
+            | Linux    | `NexusPOS-*.AppImage` / `nexuspos_*.deb` |
+            | macOS    | `NexusPOS-*.dmg` |
+            | **Kiosk (Linux)** | `NexusPOS-Kiosk-*.AppImage` / `nexuspos-kiosk_*.deb` |
+
+            ### Kiosk Deployment
+            For dedicated POS kiosk setup on Linux:
+            ```bash
+            # Install kiosk package
+            sudo dpkg -i nexuspos-kiosk_*.deb
+            # Run setup script (requires root)
+            sudo bash /opt/NexusPOS\ Kiosk/resources/kiosk/setup-kiosk.sh
+            sudo reboot
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

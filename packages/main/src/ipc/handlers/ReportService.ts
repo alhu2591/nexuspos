@@ -1,114 +1,151 @@
 // NexusPOS — Report IPC Handler
 
+import { PrismaClient } from '@prisma/client';
 import type { DatabaseManager } from '../../database/DatabaseManager';
 import { AppLogger } from '../../utils/AppLogger';
 
 const logger = new AppLogger('ReportService');
 
 export class ReportService {
-  constructor(private db: DatabaseManager) {}
+  private readonly db: PrismaClient;
 
-  async getDailyReport(payload: { date: string; storeId: string }) {
-    const start = new Date(payload.date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(payload.date);
-    end.setHours(23, 59, 59, 999);
-
-    const sales = await this.db.client.sale.findMany({
-      where: { storeId: payload.storeId, createdAt: { gte: start, lte: end }, status: 'COMPLETED' },
-      include: { lines: true, payments: true },
-    });
-
-    const totalGross = sales.reduce((s, sale) => s + sale.totalGross, 0);
-    const totalTax = sales.reduce((s, sale) => s + sale.totalTax, 0);
-    const totalNet = sales.reduce((s, sale) => s + sale.totalNet, 0);
-    const totalDiscount = sales.reduce((s, sale) => s + sale.totalDiscount, 0);
-    const saleCount = sales.length;
-
-    return { date: payload.date, saleCount, totalGross, totalTax, totalNet, totalDiscount };
+  constructor(private readonly dbManager: DatabaseManager) {
+    this.db = dbManager.client;
   }
 
-  async getSalesReport(payload: { startDate: string; endDate: string; storeId: string }) {
-    const start = new Date(payload.startDate);
-    const end = new Date(payload.endDate);
+  async getDailyReport(rawPayload: unknown) {
+    const { storeId, startDate, endDate } = rawPayload as {
+      storeId: string;
+      startDate: string;
+      endDate: string;
+    };
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    const sales = await this.db.client.sale.findMany({
+    const [sales, refunds] = await Promise.all([
+      this.db.sale.findMany({
+        where: { storeId, createdAt: { gte: start, lte: end }, status: 'COMPLETED' },
+        include: { payments: true, taxBreakdown: true },
+      }),
+      this.db.refund.findMany({
+        where: { sale: { storeId }, createdAt: { gte: start, lte: end }, status: 'COMPLETED' },
+      }),
+    ]);
+
+    // Correct Sale model fields: totalAmount, taxAmount, discountAmount (not totalGross/totalNet/totalDiscount)
+    const totalSales      = sales.reduce((s, r) => s + r.totalAmount, 0);
+    const totalRefunds    = refunds.reduce((s, r) => s + r.amount, 0);
+    const totalTax        = sales.reduce((s, r) => s + r.taxAmount, 0);
+    const totalDiscounts  = sales.reduce((s, r) => s + r.discountAmount, 0);
+
+    const cashSales = sales.reduce(
+      (s, r) => s + r.payments.filter(p => p.paymentMethod === 'CASH').reduce((a, p) => a + p.amount, 0),
+      0
+    );
+    const cardSales = totalSales - cashSales;
+
+    return {
+      period: { start, end },
+      totalSales,
+      totalRefunds,
+      netSales: totalSales - totalRefunds,
+      totalTax,
+      totalDiscounts,
+      cashSales,
+      cardSales,
+      transactionCount: sales.length,
+      avgTransactionValue: sales.length > 0 ? Math.round(totalSales / sales.length) : 0,
+    };
+  }
+
+  async getSalesReport(rawPayload: unknown) {
+    const { storeId, startDate, endDate } = rawPayload as {
+      storeId: string;
+      startDate: string;
+      endDate: string;
+    };
+
+    const start = new Date(startDate);
+    const end   = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    return this.db.sale.findMany({
       where: {
-        storeId: payload.storeId,
+        storeId,
         createdAt: { gte: start, lte: end },
         status: 'COMPLETED',
       },
-      include: { lines: { include: { product: true } }, payments: true },
+      include: {
+        lines: { include: { product: true } },
+        payments: true,
+        cashier: { select: { id: true, firstName: true, lastName: true } },
+        customer: { select: { id: true, firstName: true, lastName: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
-
-    return sales;
   }
 
-  async getShiftReport(payload: { shiftId: string }) {
-    const shift = await this.db.client.shift.findUnique({
-      where: { id: payload.shiftId },
+  async getShiftReport(rawPayload: unknown) {
+    const { shiftId } = rawPayload as { shiftId: string };
+
+    const shift = await this.db.shift.findUnique({
+      where: { id: shiftId },
       include: {
-        summary: true,
+        shiftSummary: true,
         cashMovements: true,
-        sales: { include: { payments: true } },
+        user: { select: { firstName: true, lastName: true } },
       },
     });
+
     if (!shift) throw new Error('Shift not found');
     return shift;
   }
 
-  async getProductsReport(payload: { startDate: string; endDate: string; storeId: string; limit?: number }) {
-    const start = new Date(payload.startDate);
-    const end = new Date(payload.endDate);
-    end.setHours(23, 59, 59, 999);
+  async getProductsReport(rawPayload: unknown) {
+    const { storeId, startDate, endDate, limit = 20 } = rawPayload as {
+      storeId: string;
+      startDate: string;
+      endDate: string;
+      limit?: number;
+    };
 
-    const lines = await this.db.client.saleLine.findMany({
+    return this.db.saleLine.groupBy({
+      by: ['productId', 'productName'],
       where: {
-        sale: { storeId: payload.storeId, createdAt: { gte: start, lte: end }, status: 'COMPLETED' },
-      },
-      include: { product: true },
-    });
-
-    const byProduct = new Map<string, { name: string; quantity: number; revenue: number }>();
-    for (const line of lines) {
-      const key = line.productId;
-      const existing = byProduct.get(key) ?? { name: line.product.name, quantity: 0, revenue: 0 };
-      byProduct.set(key, {
-        name: existing.name,
-        quantity: existing.quantity + line.quantity,
-        revenue: existing.revenue + line.lineTotal,
-      });
-    }
-
-    return Array.from(byProduct.entries())
-      .map(([id, data]) => ({ productId: id, ...data }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, payload.limit ?? 50);
-  }
-
-  async getCustomersReport(payload: { startDate: string; endDate: string; storeId: string }) {
-    const start = new Date(payload.startDate);
-    const end = new Date(payload.endDate);
-    end.setHours(23, 59, 59, 999);
-
-    const customers = await this.db.client.customer.findMany({
-      where: { storeId: payload.storeId, isActive: true },
-      include: {
-        sales: {
-          where: { createdAt: { gte: start, lte: end }, status: 'COMPLETED' },
+        sale: {
+          storeId,
+          createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
+          status: 'COMPLETED',
         },
       },
-      orderBy: { totalSpend: 'desc' },
-      take: 50,
+      _sum: { quantity: true, lineTotal: true },
+      _count: { id: true },
+      orderBy: { _sum: { lineTotal: 'desc' } },
+      take: limit,
     });
+  }
 
-    return customers.map((c) => ({
-      id: c.id,
-      name: `${c.firstName} ${c.lastName ?? ''}`.trim(),
-      saleCount: c.sales.length,
-      totalSpend: c.totalSpend,
-    }));
+  async getCustomersReport(rawPayload: unknown) {
+    const { storeId, startDate, endDate } = rawPayload as {
+      storeId: string;
+      startDate: string;
+      endDate: string;
+    };
+
+    return this.db.sale.groupBy({
+      by: ['customerId'],
+      where: {
+        storeId,
+        customerId: { not: null },
+        createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
+        status: 'COMPLETED',
+      },
+      _sum: { totalAmount: true }, // correct field: totalAmount
+      _count: { id: true },
+      orderBy: { _sum: { totalAmount: 'desc' } },
+      take: 20,
+    });
   }
 }

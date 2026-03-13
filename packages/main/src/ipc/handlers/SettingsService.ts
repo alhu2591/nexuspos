@@ -1,41 +1,60 @@
 // NexusPOS — Settings IPC Handler
 
+import { PrismaClient } from '@prisma/client';
+import { createId } from '@paralleldrive/cuid2';
 import type { DatabaseManager } from '../../database/DatabaseManager';
+import { SetSettingSchema } from '@nexuspos/shared';
 import { AppLogger } from '../../utils/AppLogger';
 
 const logger = new AppLogger('SettingsService');
 
 export class SettingsService {
-  constructor(private db: DatabaseManager) {}
+  private readonly db: PrismaClient;
 
-  async getSetting(payload: { storeId: string; key: string }) {
-    const setting = await this.db.client.storeSetting.findUnique({
-      where: { storeId_key: { storeId: payload.storeId, key: payload.key } },
+  constructor(private readonly dbManager: DatabaseManager) {
+    this.db = dbManager.client;
+  }
+
+  async getSetting(rawPayload: unknown) {
+    const { key, storeId } = rawPayload as { key: string; storeId: string };
+
+    const setting = await this.db.storeSetting.findUnique({
+      where: { storeId_key: { storeId, key } },
     });
     return setting?.value ?? null;
   }
 
-  async setSetting(payload: { storeId: string; key: string; value: string }) {
-    const setting = await this.db.client.storeSetting.upsert({
+  async setSetting(rawPayload: unknown) {
+    const payload = SetSettingSchema.parse(rawPayload);
+
+    const setting = await this.db.storeSetting.upsert({
       where: { storeId_key: { storeId: payload.storeId, key: payload.key } },
-      update: { value: payload.value },
-      create: { storeId: payload.storeId, key: payload.key, value: payload.value },
+      update: { value: payload.value, dataType: payload.dataType },
+      create: {
+        id: createId(),
+        storeId: payload.storeId,
+        key: payload.key,
+        value: payload.value,
+        dataType: payload.dataType,
+      },
     });
-    logger.info('Setting updated', { key: payload.key });
+
+    logger.info(`Setting updated: ${payload.key}`);
     return setting;
   }
 
-  async getAllSettings(payload: { storeId: string }) {
-    const settings = await this.db.client.storeSetting.findMany({
-      where: { storeId: payload.storeId },
+  async getAllSettings(rawPayload: unknown) {
+    const { storeId } = rawPayload as { storeId: string };
+
+    const settings = await this.db.storeSetting.findMany({
+      where: { storeId },
     });
-    return Object.fromEntries(settings.map((s) => [s.key, s.value]));
+    return Object.fromEntries(settings.map(s => [s.key, s.value]));
   }
 
-  async getDeviceConfig(payload: { deviceId: string }) {
-    const config = await this.db.client.deviceConfig.findUnique({
-      where: { deviceId: payload.deviceId },
-    });
-    return config;
+  async getDeviceConfig(rawPayload: unknown) {
+    const { deviceId } = rawPayload as { deviceId: string };
+
+    return this.db.deviceConfig.findUnique({ where: { deviceId } });
   }
 }

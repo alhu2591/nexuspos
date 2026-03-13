@@ -18,13 +18,14 @@ export class ProductService {
 
   async searchProducts(rawPayload: unknown) {
     const payload = ProductSearchSchema.parse(rawPayload);
+    const hasQuery = payload.query && payload.query.trim().length > 0;
 
     return this.db.product.findMany({
       where: {
         storeId: payload.storeId,
         isActive: true,
         ...(payload.categoryId && { categoryId: payload.categoryId }),
-        ...(payload.query && {
+        ...(hasQuery && {
           OR: [
             { name: { contains: payload.query } },
             { sku: { contains: payload.query } },
@@ -38,9 +39,7 @@ export class ProductService {
         taxRule: true,
         inventory: true,
       },
-      orderBy: [
-        { name: 'asc' },
-      ],
+      orderBy: [{ name: 'asc' }],
       take: payload.limit,
       skip: payload.offset,
     });

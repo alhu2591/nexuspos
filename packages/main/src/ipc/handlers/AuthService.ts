@@ -1,7 +1,6 @@
 // NexusPOS — Auth Service
 
 import { PrismaClient } from '@prisma/client';
-import { createId } from '@paralleldrive/cuid2';
 import * as crypto from 'node:crypto';
 import type { DatabaseManager } from '../../database/DatabaseManager';
 import { LoginSchema, LoginPinSchema } from '@nexuspos/shared';
@@ -18,8 +17,16 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// In-memory session store (for single-process simplicity)
+// In-memory session store
 const sessions = new Map<string, { userId: string; expiresAt: Date }>();
+
+// Cleanup expired sessions every hour
+setInterval(() => {
+  const now = new Date();
+  for (const [token, session] of sessions.entries()) {
+    if (session.expiresAt < now) sessions.delete(token);
+  }
+}, 60 * 60 * 1000);
 
 export class AuthService {
   private readonly db: PrismaClient;
@@ -47,7 +54,10 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
     sessions.set(token, { userId: user.id, expiresAt });
 
-    await this.db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await this.db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     logger.info(`User logged in: ${user.username}`);
 
@@ -77,6 +87,11 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000); // 4 hours for PIN sessions
     sessions.set(token, { userId: user.id, expiresAt });
 
+    await this.db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
     return {
       userId: user.id,
       user: { ...user, passwordHash: undefined, pin: undefined },
@@ -100,6 +115,7 @@ export class AuthService {
 
     const session = sessions.get(token);
     if (!session) return null;
+
     if (session.expiresAt < new Date()) {
       sessions.delete(token);
       return null;
