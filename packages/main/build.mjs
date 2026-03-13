@@ -11,6 +11,8 @@ const external = [
   // Prisma needs to stay external (native bindings)
   '@prisma/client',
   '.prisma/client',
+  'prisma',
+  'prisma/build/index.js',
   // Node.js built-ins
   'path', 'fs', 'os', 'crypto', 'events', 'stream', 'util',
   'net', 'http', 'https', 'url', 'child_process', 'worker_threads',

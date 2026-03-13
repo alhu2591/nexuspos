@@ -48,13 +48,11 @@ const kioskConfig = {
     desktop: {
       Name: 'NexusPOS Kiosk',
       Comment: 'Point of Sale — Kiosk Mode',
-      // Launch with --kiosk flag to enable fullscreen locked mode
-      Exec: 'nexuspos-kiosk --kiosk %U',
+      // NOTE: Exec is NOT set here — electron-builder generates it from executableName above.
+      // Setting Exec here causes: "Please specify executable name as linux.executableName"
       Categories: 'Office;Finance;',
-      // Hide from normal application launchers (kiosk-only)
       NoDisplay: 'false',
       StartupNotify: 'false',
-      // Auto-start in GNOME/KDE sessions
       'X-GNOME-Autostart-enabled': 'true',
     },
   },

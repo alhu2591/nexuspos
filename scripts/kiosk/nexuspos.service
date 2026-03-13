@@ -1,8 +1,8 @@
 [Unit]
 Description=NexusPOS Point of Sale Application
 Documentation=https://nexuspos.io/docs
-After=network.target graphical-session.target
-Wants=graphical-session.target
+After=network.target graphical.target
+Wants=graphical.target
 
 [Service]
 Type=simple
@@ -10,13 +10,15 @@ User=pos
 Group=pos
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pos/.Xauthority
-Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
-Environment=XDG_RUNTIME_DIR=/run/user/1001
+# XDG_RUNTIME_DIR and DBUS are patched by setup-kiosk.sh (sed replaces POS_UID)
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/POS_UID/bus
+Environment=XDG_RUNTIME_DIR=/run/user/POS_UID
 Environment=KIOSK_MODE=1
 Environment=NODE_ENV=production
 
-WorkingDirectory=/opt/nexuspos
-ExecStart=/opt/nexuspos/nexuspos --kiosk --disable-gpu-sandbox
+WorkingDirectory=/opt/NexusPOS Kiosk
+# --no-sandbox required for Chromium when running without kernel user namespaces
+ExecStart=/opt/NexusPOS\ Kiosk/nexuspos-kiosk --kiosk --no-sandbox --disable-gpu-sandbox
 ExecStop=/bin/kill -TERM $MAINPID
 
 # Restart policy: always restart on crash
@@ -26,15 +28,20 @@ RestartPreventExitStatus=0
 
 # Resource limits (optimized for low-end hardware)
 LimitNOFILE=65536
-MemoryLimit=512M
+MemoryMax=512M
 CPUQuota=90%
 
 # Security hardening
+# NOTE: ProtectHome cannot be used together with ReadWritePaths under /home
+# Use 'no' to allow the pos user to write to ~/.config and ~/.local
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/nexuspos/data /home/pos/.config /home/pos/.local
-ProtectHome=read-only
+ProtectHome=no
+ReadWritePaths=/opt/NexusPOS Kiosk/data /home/pos/.config /home/pos/.local /home/pos/.Xauthority
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictNamespaces=true
 
 # Logging
 StandardOutput=journal
@@ -42,4 +49,4 @@ StandardError=journal
 SyslogIdentifier=nexuspos
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=graphical.target

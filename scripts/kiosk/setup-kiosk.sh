@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
 # NexusPOS — Linux Kiosk Setup Script
 # Configures a Linux system for dedicated POS kiosk deployment
-# Tested on: Ubuntu 22.04 LTS, Debian 12, Raspberry Pi OS
+# Tested on: Ubuntu 22.04 LTS, Ubuntu 24.04 LTS, Debian 12, Raspberry Pi OS
 
 set -euo pipefail
 
 NEXUSPOS_USER="pos"
 NEXUSPOS_HOME="/home/${NEXUSPOS_USER}"
-NEXUSPOS_DIR="/opt/nexuspos"
-NEXUSPOS_DATA="/opt/nexuspos/data"
+# electron-builder installs to /opt/<productName> (spaces included)
+NEXUSPOS_DIR="/opt/NexusPOS Kiosk"
+NEXUSPOS_BIN="${NEXUSPOS_DIR}/nexuspos-kiosk"
+NEXUSPOS_DATA="${NEXUSPOS_DIR}/data"
 SERVICE_FILE="/etc/systemd/system/nexuspos.service"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf.d/50-nexuspos.conf"
 
-log() { echo "[NexusPOS] $*"; }
+log()   { echo "[NexusPOS] $*"; }
 error() { echo "[NexusPOS ERROR] $*" >&2; exit 1; }
 
 # ── CHECK ROOT ────────────────────────────────────────────
 [[ $EUID -ne 0 ]] && error "This script must be run as root"
+
+# ── VALIDATE INSTALL PATH ────────────────────────────────
+if [[ ! -f "${NEXUSPOS_BIN}" ]]; then
+  error "NexusPOS Kiosk binary not found at '${NEXUSPOS_BIN}'.
+  Please install the .deb package first:
+    sudo dpkg -i nexuspos-kiosk_*.deb
+  Or copy the AppImage to '${NEXUSPOS_BIN}' and chmod +x it."
+fi
 
 log "Starting NexusPOS kiosk setup..."
 
@@ -30,8 +40,12 @@ if ! id "${NEXUSPOS_USER}" &>/dev/null; then
     --groups audio,video,input,plugdev,dialout \
     --comment "NexusPOS Kiosk User" \
     "${NEXUSPOS_USER}"
-  passwd -l "${NEXUSPOS_USER}"  # Lock password
+  passwd -l "${NEXUSPOS_USER}"  # Lock password (auto-login only)
 fi
+
+# Get actual UID (may not be 1001 on all systems)
+POS_UID=$(id -u "${NEXUSPOS_USER}")
+log "POS user UID: ${POS_UID}"
 
 # ── INSTALL DEPENDENCIES ──────────────────────────────────
 log "Installing dependencies..."
@@ -50,9 +64,10 @@ apt-get install -y \
   libgtk-3-0 \
   libnss3 \
   libxss1 \
-  libgconf-2-4 \
   libxtst6 \
   xdg-utils \
+  libgbm1 \
+  libdrm2 \
   cups \
   cups-client \
   printer-driver-escpr \
@@ -77,7 +92,9 @@ EOF
 log "Configuring Openbox session..."
 mkdir -p "${NEXUSPOS_HOME}/.config/openbox"
 
-cat > "${NEXUSPOS_HOME}/.config/openbox/autostart" << 'EOF'
+# Note: --no-sandbox is required for Chromium/Electron when running
+# without user namespaces support (common in embedded/kiosk Linux)
+cat > "${NEXUSPOS_HOME}/.config/openbox/autostart" << EOF
 #!/bin/bash
 # NexusPOS Openbox Autostart
 
@@ -89,11 +106,12 @@ xset s noblank
 # Hide cursor after 3 seconds of inactivity
 unclutter -idle 3 -root &
 
-# Set background
+# Set background color
 xsetroot -solid "#1e293b" &
 
-# Launch NexusPOS
-/opt/nexuspos/nexuspos --kiosk &
+# Launch NexusPOS in kiosk mode
+# --no-sandbox: required for Electron without kernel user namespaces
+"${NEXUSPOS_BIN}" --kiosk --no-sandbox --disable-gpu-sandbox &
 EOF
 
 chmod +x "${NEXUSPOS_HOME}/.config/openbox/autostart"
@@ -122,6 +140,8 @@ cat > "${NEXUSPOS_HOME}/.config/openbox/rc.xml" << 'EOF'
     <keybind key="C-A-BackSpace"><action name="Execute"><command>true</command></action></keybind>
     <!-- Disable Alt+F4 close -->
     <keybind key="A-F4"><action name="Execute"><command>true</command></action></keybind>
+    <!-- Disable F11 fullscreen toggle -->
+    <keybind key="F11"><action name="Execute"><command>true</command></action></keybind>
   </keyboard>
   <applications>
     <application class="*">
@@ -135,11 +155,17 @@ EOF
 
 # ── INSTALL SYSTEMD SERVICE ────────────────────────────────
 log "Installing systemd service..."
-cp "$(dirname "$0")/nexuspos.service" "${SERVICE_FILE}"
 
-# Get POS user UID for XDG_RUNTIME_DIR
-POS_UID=$(id -u "${NEXUSPOS_USER}")
-sed -i "s|/run/user/1001|/run/user/${POS_UID}|g" "${SERVICE_FILE}"
+# Copy service template from bundled resources
+SERVICE_TEMPLATE="$(dirname "$0")/nexuspos.service"
+if [[ ! -f "${SERVICE_TEMPLATE}" ]]; then
+  error "Service template not found at '${SERVICE_TEMPLATE}'"
+fi
+
+cp "${SERVICE_TEMPLATE}" "${SERVICE_FILE}"
+
+# Patch dynamic UID (DBUS and XDG_RUNTIME_DIR depend on the actual user UID)
+sed -i "s|POS_UID|${POS_UID}|g" "${SERVICE_FILE}"
 
 systemctl daemon-reload
 systemctl enable nexuspos.service
@@ -190,10 +216,13 @@ systemctl mask hybrid-sleep.target
 
 # ── CONFIGURE WATCHDOG ────────────────────────────────────
 log "Configuring system watchdog..."
-cat >> /etc/systemd/system.conf << 'EOF'
+# Only add if not already present (idempotent)
+if ! grep -q "RuntimeWatchdogSec" /etc/systemd/system.conf; then
+  cat >> /etc/systemd/system.conf << 'EOF'
 RuntimeWatchdogSec=30s
 ShutdownWatchdogSec=2min
 EOF
+fi
 
 # ── KERNEL PARAMETERS ─────────────────────────────────────
 log "Optimizing kernel parameters..."
@@ -202,7 +231,6 @@ cat > /etc/sysctl.d/99-nexuspos.conf << 'EOF'
 vm.swappiness=10
 vm.dirty_ratio=60
 vm.dirty_background_ratio=2
-kernel.sched_latency_ns=1000000
 net.core.rmem_max=2097152
 net.core.wmem_max=2097152
 EOF
@@ -217,10 +245,11 @@ log "╔════════════════════════
 log "║  NexusPOS Kiosk Setup Complete!      ║"
 log "╚══════════════════════════════════════╝"
 log ""
-log "Next steps:"
-log "  1. Copy NexusPOS AppImage to ${NEXUSPOS_DIR}/"
-log "  2. chmod +x ${NEXUSPOS_DIR}/nexuspos"
-log "  3. Reboot the system: sudo reboot"
+log "Installed binary : ${NEXUSPOS_BIN}"
+log "Data directory   : ${NEXUSPOS_DATA}"
+log "Kiosk user       : ${NEXUSPOS_USER} (UID ${POS_UID})"
+log ""
+log "Next step: sudo reboot"
 log ""
 log "After reboot, the system will:"
 log "  • Auto-login as '${NEXUSPOS_USER}'"

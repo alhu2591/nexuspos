@@ -2,7 +2,7 @@
 // Entry point: app providers, routing, and layout
 
 import React, { Suspense, useEffect } from 'react';
-import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
+import { createHashRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -57,7 +57,7 @@ function RequireShift({ children }: { children: React.ReactNode }) {
 // ============================================================
 // ROUTER CONFIGURATION
 // ============================================================
-const router = createBrowserRouter([
+const router = createHashRouter([
   // Customer display (secondary screen)
   {
     path: '/customer-display',
@@ -243,6 +243,11 @@ export function App() {
   const { loadSettings } = useSettingsStore();
 
   useEffect(() => {
+    // Apply kiosk-mode class to body (disables text selection, cursor changes, etc.)
+    if (window.platform?.isKiosk) {
+      document.body.classList.add('kiosk-mode');
+    }
+
     // Initialize app state on mount
     Promise.all([
       initialize(),
