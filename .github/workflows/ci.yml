@@ -7,28 +7,36 @@ on:
   pull_request:
     branches: [main, develop]
 
+# ── Workflow-level defaults ─────────────────────────────────
 env:
   NODE_VERSION: '22.x'
+  # Force all GitHub Actions (checkout, setup-node, etc.) to run
+  # on Node.js 24 instead of the deprecated Node.js 20 runtime.
+  # Required until action authors bump their bundled node version.
+  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
-  # ────────────────────────────────────────────────────────
-  # JOB 1: Quality Gates — lint + typecheck + test
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 1 · Quality Gates — typecheck + tests
+  # Runs on every push and PR
+  # ══════════════════════════════════════════════════════════
   quality:
     name: Quality Gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
@@ -40,11 +48,11 @@ jobs:
           DATABASE_URL: 'file:./dev.db'
           PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1'
 
-      - name: Type check (shared)
+      - name: Type check — shared
         working-directory: packages/shared
         run: npx tsc --noEmit
 
-      - name: Type check (renderer)
+      - name: Type check — renderer
         working-directory: packages/renderer
         run: npx tsc --noEmit
 
@@ -54,23 +62,27 @@ jobs:
         env:
           NODE_ENV: test
 
-  # ────────────────────────────────────────────────────────
-  # JOB 2: Build — Vite production bundle
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 2 · Build — compile renderer + main process
+  # Produces artifacts consumed by all package jobs
+  # ══════════════════════════════════════════════════════════
   build:
     name: Build Application
-    needs: quality
     runs-on: ubuntu-latest
+    needs: quality
     timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
@@ -96,45 +108,50 @@ jobs:
         working-directory: packages/main
         run: node build.mjs
 
-      - name: Upload renderer build
+      - name: Upload renderer artifact
         uses: actions/upload-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
           retention-days: 7
+          if-no-files-found: error
 
-      - name: Upload main process build
+      - name: Upload main process artifact
         uses: actions/upload-artifact@v4
         with:
           name: main-dist
           path: packages/main/dist/
           retention-days: 7
+          if-no-files-found: error
 
-  # ────────────────────────────────────────────────────────
-  # JOB 3: Package Linux (AppImage + deb)
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 3 · Package Linux — AppImage + .deb (standard)
+  # ══════════════════════════════════════════════════════════
   package-linux:
     name: Package Linux
+    runs-on: ubuntu-latest
     needs: build
-    if: >
+    timeout-minutes: 30
+    if: >-
       github.event_name == 'push' &&
       (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y dpkg-dev fakeroot rpm
+          sudo apt-get install -y --no-install-recommends dpkg-dev fakeroot rpm
 
       - name: Install Node dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
@@ -150,26 +167,26 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Download renderer build
+      - name: Download renderer artifact
         uses: actions/download-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
 
-      - name: Download main process build
+      - name: Download main process artifact
         uses: actions/download-artifact@v4
         with:
           name: main-dist
           path: packages/main/dist/
 
-      - name: Package Linux (standard)
+      - name: Package Linux (AppImage + deb)
         run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.config.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List build output
         if: always()
-        run: find dist-packages -type f 2>/dev/null | head -20 || echo "No dist-packages found"
+        run: find dist-packages -maxdepth 1 -type f 2>/dev/null | sort || echo "No dist-packages found"
 
       - name: Upload Linux packages
         uses: actions/upload-artifact@v4
@@ -181,31 +198,35 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  # ────────────────────────────────────────────────────────
-  # JOB 4: Package Linux Kiosk (AppImage + deb, kiosk mode)
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 4 · Package Linux Kiosk — AppImage + .deb (kiosk mode)
+  # Pre-configured for dedicated POS terminal deployment
+  # ══════════════════════════════════════════════════════════
   package-kiosk:
     name: Package Linux Kiosk
+    runs-on: ubuntu-latest
     needs: build
-    if: >
+    timeout-minutes: 30
+    if: >-
       github.event_name == 'push' &&
       (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y dpkg-dev fakeroot rpm
+          sudo apt-get install -y --no-install-recommends dpkg-dev fakeroot rpm
 
       - name: Install Node dependencies
         run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
@@ -221,26 +242,26 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Download renderer build
+      - name: Download renderer artifact
         uses: actions/download-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
 
-      - name: Download main process build
+      - name: Download main process artifact
         uses: actions/download-artifact@v4
         with:
           name: main-dist
           path: packages/main/dist/
 
-      - name: Package Linux Kiosk
+      - name: Package Linux Kiosk (AppImage + deb)
         run: npx electron-builder --linux AppImage deb --publish never --config electron-builder.kiosk.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List kiosk build output
         if: always()
-        run: find dist-packages/kiosk -type f 2>/dev/null | head -20 || echo "No kiosk packages found"
+        run: find dist-packages/kiosk -maxdepth 1 -type f 2>/dev/null | sort || echo "No kiosk packages found"
 
       - name: Upload Kiosk packages
         uses: actions/upload-artifact@v4
@@ -252,24 +273,29 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  # ────────────────────────────────────────────────────────
-  # JOB 5: Package Windows (NSIS installer)
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 5 · Package Windows — NSIS installer (.exe)
+  # ══════════════════════════════════════════════════════════
   package-windows:
     name: Package Windows
-    needs: build
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    needs: build
     timeout-minutes: 30
+    if: >-
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -287,19 +313,19 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Download renderer build
+      - name: Download renderer artifact
         uses: actions/download-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
 
-      - name: Download main process build
+      - name: Download main process artifact
         uses: actions/download-artifact@v4
         with:
           name: main-dist
           path: packages/main/dist/
 
-      - name: Package Windows
+      - name: Package Windows (NSIS)
         shell: pwsh
         run: |
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
@@ -309,41 +335,49 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: List build output
+        if: always()
+        run: Get-ChildItem dist-packages -Filter *.exe -ErrorAction SilentlyContinue | Select-Object Name, Length
+
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
           name: windows-packages
           path: dist-packages/*.exe
+          if-no-files-found: warn
           retention-days: 30
 
-  # ────────────────────────────────────────────────────────
-  # JOB 6: Package macOS (DMG)
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 6 · Package macOS — DMG (unsigned unless cert provided)
+  # ══════════════════════════════════════════════════════════
   package-macos:
     name: Package macOS
-    needs: build
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
+    needs: build
     timeout-minutes: 40
-
+    if: >-
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
-      - name: Import code signing certificate
+      - name: Import Apple code signing certificate
         if: env.HAS_CERT == 'true'
         uses: apple-actions/import-codesign-certs@v2
         with:
@@ -361,19 +395,19 @@ jobs:
         working-directory: packages/shared
         run: npx tsc
 
-      - name: Download renderer build
+      - name: Download renderer artifact
         uses: actions/download-artifact@v4
         with:
           name: renderer-dist
           path: packages/renderer/dist/
 
-      - name: Download main process build
+      - name: Download main process artifact
         uses: actions/download-artifact@v4
         with:
           name: main-dist
           path: packages/main/dist/
 
-      - name: Package macOS
+      - name: Package macOS (DMG)
         run: npx electron-builder --mac dmg --publish never --config electron-builder.config.js
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -383,29 +417,38 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
+      - name: List build output
+        if: always()
+        run: find dist-packages -maxdepth 1 -name "*.dmg" 2>/dev/null | sort || echo "No DMG found"
+
       - name: Upload macOS packages
         uses: actions/upload-artifact@v4
         with:
           name: macos-packages
           path: dist-packages/*.dmg
+          if-no-files-found: warn
           retention-days: 30
 
-  # ────────────────────────────────────────────────────────
-  # JOB 7: GitHub Release
-  # Attaches all platform packages + kiosk packages to release
-  # ────────────────────────────────────────────────────────
+  # ══════════════════════════════════════════════════════════
+  # JOB 7 · GitHub Release — publish all packages to a release
+  # Only runs when a version tag (v*.*.*) is pushed
+  # ══════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
+    runs-on: ubuntu-latest
     needs: [package-linux, package-kiosk, package-windows, package-macos]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Download all packages
+      - name: Download all platform packages
         uses: actions/download-artifact@v4
         with:
           path: release-assets/
@@ -415,32 +458,43 @@ jobs:
       - name: List release assets
         run: find release-assets -type f | sort
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
           body: |
             ## NexusPOS ${{ github.ref_name }}
 
             ### Downloads
-            | Platform | File |
-            |----------|------|
-            | Windows  | `NexusPOS-Setup-*.exe` |
-            | Linux    | `NexusPOS-*.AppImage` / `nexuspos_*.deb` |
-            | macOS    | `NexusPOS-*.dmg` |
-            | **Kiosk (Linux)** | `NexusPOS-Kiosk-*.AppImage` / `nexuspos-kiosk_*.deb` |
 
-            ### Kiosk Deployment
-            For dedicated POS kiosk setup on Linux:
+            | Platform | Package | Notes |
+            |----------|---------|-------|
+            | 🪟 Windows | `NexusPOS Setup *.exe` | NSIS installer |
+            | 🐧 Linux | `NexusPOS-*.AppImage` | Portable, no install needed |
+            | 🐧 Linux | `nexuspos_*_amd64.deb` | Debian/Ubuntu package |
+            | 🍎 macOS | `NexusPOS-*-arm64.dmg` | Apple Silicon |
+            | 🍎 macOS | `NexusPOS-*-x64.dmg` | Intel |
+            | 🖥️ Kiosk (Linux) | `NexusPOS Kiosk-*.AppImage` | Dedicated POS terminal |
+            | 🖥️ Kiosk (Linux) | `nexuspos-kiosk_*_amd64.deb` | Kiosk .deb package |
+
+            ### Kiosk Deployment (Linux)
+
+            For a dedicated POS kiosk terminal:
+
             ```bash
-            # Install kiosk package
-            sudo dpkg -i nexuspos-kiosk_*.deb
-            # Run setup script (requires root)
-            sudo bash /opt/NexusPOS\ Kiosk/resources/kiosk/setup-kiosk.sh
+            # 1. Install the kiosk .deb package
+            sudo dpkg -i nexuspos-kiosk_*_amd64.deb
+
+            # 2. Run the automated kiosk setup script (as root)
+            sudo bash "/opt/NexusPOS Kiosk/resources/kiosk/setup-kiosk.sh"
+
+            # 3. Reboot — system will auto-login and launch NexusPOS
             sudo reboot
             ```
+
+            > **Requirements:** Ubuntu 22.04+ / Debian 12+, LightDM, Openbox
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
