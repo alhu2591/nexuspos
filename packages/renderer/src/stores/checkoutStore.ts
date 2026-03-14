@@ -9,6 +9,7 @@ import type { IProduct, ICartLine, ICartTotals, ICustomer, IDiscountRule } from 
 import { calculateCartTotals, applyDiscounts } from '@nexuspos/shared';
 import { ipcService } from '../services/ipcService';
 import { useSettingsStore } from './settingsStore';
+import { useAuthStore } from './authStore';
 
 // ============================================================
 // STATE TYPES
@@ -360,10 +361,9 @@ export const useCheckoutStore = create<CartState & CartActions>()(
           throw new Error('Device not initialized. Please restart the application.');
         }
 
-        // Get session for cashier ID
-        const sessionResult = await ipcService.invoke<{ userId: string }>('auth:session', {});
-        const session = sessionResult.data as { userId: string; user?: { id: string } } | null;
-        const cashierId = session?.userId ?? (session as any)?.user?.id;
+        // Get cashier ID from the already-loaded auth session (avoids IPC round-trip)
+        const authSession = useAuthStore.getState().session;
+        const cashierId = authSession?.userId;
 
         if (!cashierId) {
           throw new Error('No active session. Please log in again.');

@@ -14,6 +14,8 @@ import { DiscountModal } from '../components/DiscountModal';
 import { HeldCartsPanel } from '../components/HeldCartsPanel';
 import { useHardwareEvents } from '../../../hooks/useHardwareEvents';
 import { useBarcodeScanner } from '../../../hooks/useBarcodeScanner';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { productAPI } from '../../../services/ipcService';
 import { formatCents } from '@nexuspos/shared';
 import {
   ShoppingCart,
@@ -46,16 +48,23 @@ export default function CheckoutScreen() {
   } = useCheckoutStore();
 
   const { session } = useAuthStore();
+  const { storeId } = useSettingsStore();
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showHeldCarts, setShowHeldCarts] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [numPadTarget, setNumPadTarget] = useState<'qty' | 'price' | 'discount' | null>(null);
 
-  // Barcode scanner integration
-  useBarcodeScanner((barcode) => {
-    if (step === 'cart') {
-      // Product lookup handled by ProductSearch
+  // Barcode scanner integration - look up product and add to cart
+  useBarcodeScanner(async (barcode) => {
+    if (step !== 'cart' || !storeId) return;
+    try {
+      const result = await productAPI.findByBarcode(barcode, storeId);
+      if (result.success && result.data) {
+        addProduct(result.data as any);
+      }
+    } catch {
+      // Product not found — could show a toast
     }
   });
 

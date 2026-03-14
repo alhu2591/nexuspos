@@ -332,7 +332,8 @@ export class VATEngine {
       unitPrice: line.unitPrice,
       discountAmount: line.discountAmount,
       taxRate: line.taxRate,
-      taxClass: 'standard', // Will be enriched from product's tax rule
+      // Use the actual tax class from the product's tax rule, fall back to 'standard'
+      taxClass: (line as any).taxClass ?? (line.taxRate === 0 ? 'zero' : 'standard'),
       taxInclusive: line.taxInclusive,
     }));
 

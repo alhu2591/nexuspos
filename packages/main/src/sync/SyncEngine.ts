@@ -535,9 +535,7 @@ export class SyncEngine extends EventEmitter {
 
   // ── SHUTDOWN ───────────────────────────────────────────
   async shutdown(): Promise<void> {
-    this.isRunning = false;
-
-    // Announce goodbye to peers
+    // Announce goodbye BEFORE setting isRunning=false so the check passes
     if (this.discoverySocket && this.isRunning) {
       const byeMsg = JSON.stringify({
         type: 'BYE',
@@ -561,6 +559,8 @@ export class SyncEngine extends EventEmitter {
         }
       } catch { /* ignore errors during shutdown */ }
     }
+
+    this.isRunning = false;
 
     if (this.discoveryTimer) clearInterval(this.discoveryTimer);
     if (this.syncTimer) clearInterval(this.syncTimer);

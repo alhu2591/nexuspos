@@ -62,6 +62,7 @@ const ALLOWED_CHANNELS: Set<IPCChannel> = new Set([
   'hardware:status',
   'drawer:open',
   // Settings
+  'category:list',
   'settings:get',
   'settings:set',
   'settings:getAll',

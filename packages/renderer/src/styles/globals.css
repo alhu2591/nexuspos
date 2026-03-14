@@ -71,3 +71,25 @@
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
+
+/* Custom animations */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Utility */
+.active\:scale-98:active {
+  transform: scale(0.98);
+}

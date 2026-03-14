@@ -55,7 +55,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'flex flex-col bg-gray-900 text-white transition-all duration-200 ease-out flex-shrink-0',
+          'relative flex flex-col bg-gray-900 text-white transition-all duration-200 ease-out flex-shrink-0',
           collapsed ? 'w-16' : 'w-56',
           isCheckoutPage && 'hidden' // Hide sidebar on checkout for max screen space
         )}

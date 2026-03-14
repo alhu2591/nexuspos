@@ -99,6 +99,15 @@ export function setupIpcHandlers(deps: ServiceDependencies): void {
   createHandler('sale:find',     (_, p) => saleService.findSale(p));
   createHandler('sale:list',     (_, p) => saleService.listSales(p));
 
+  // ── CATEGORIES ───────────────────────────────────────────
+  createHandler('category:list', async (_, p) => {
+    const { storeId } = p as { storeId: string };
+    return dbManager.client.category.findMany({
+      where: { storeId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  });
+
   // ── PRODUCTS ─────────────────────────────────────────────
   createHandler('product:find',   (_, p) => productService.findProduct(p));
   createHandler('product:search', (_, p) => productService.searchProducts(p));

@@ -29,15 +29,23 @@ export const useAuthStore = create<AuthState & AuthActions>()(
 
       initialize: async () => {
         set({ isLoading: true });
+        // Use the token from the persisted session to verify it is still valid
+        const currentSession = get().session;
+        if (!currentSession?.token) {
+          set({ isLoading: false });
+          return;
+        }
         try {
-          const result = await authAPI.getSession();
+          const result = await authAPI.getSession(currentSession.token);
           if (result.success && result.data) {
             set({ session: result.data as AuthSession, isLoading: false });
           } else {
+            // Token expired or invalid — clear the persisted session
             set({ session: null, isLoading: false });
           }
         } catch {
-          set({ session: null, isLoading: false });
+          // Network/IPC error — keep existing session optimistically
+          set({ isLoading: false });
         }
       },
 

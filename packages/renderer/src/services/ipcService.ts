@@ -78,8 +78,13 @@ export const authAPI = {
   logout: (token: string) =>
     ipcService.invoke('auth:logout', { token }),
 
-  getSession: () =>
-    ipcService.invoke('auth:session', {}),
+  getSession: (token?: string) =>
+    ipcService.invoke('auth:session', token ? { token } : {}),
+};
+
+export const categoryAPI = {
+  list: (storeId: string) =>
+    ipcService.invoke('category:list', { storeId }),
 };
 
 export const productAPI = {

@@ -399,7 +399,7 @@ export type TaxClass = 'standard' | 'reduced' | 'zero' | 'exempt';
 
 export interface IDiscountRule {
   id: string;
-  storeId: string;
+  storeId?: string;        // Optional for manual/in-session discounts
   name: string;
   discountType: DiscountType;
   value: number;
@@ -410,7 +410,7 @@ export interface IDiscountRule {
   minQuantity?: number;
   couponCode?: string;
   isActive: boolean;
-  requiresAuth: boolean;
+  requiresAuth?: boolean;  // Optional for manual discounts
   startDate?: Date;
   endDate?: Date;
   maxUses?: number;
@@ -507,6 +507,7 @@ export type IPCChannel =
   | 'sale:find'
   | 'sale:list'
   // Products
+  | 'category:list'
   | 'product:find'
   | 'product:search'
   | 'product:barcode'

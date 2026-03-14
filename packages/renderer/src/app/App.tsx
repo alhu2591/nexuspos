@@ -3,6 +3,7 @@
 
 import React, { Suspense, useEffect } from 'react';
 import { createHashRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -12,6 +13,17 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ToastProvider } from '../components/ui/ToastProvider';
 import { HardwareStatusBar } from '../components/hardware/HardwareStatusBar';
 import '../i18n/index';
+
+// ── React Query client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+    },
+  },
+});
 
 // ── Lazy-loaded feature screens (code splitting for performance)
 const CheckoutScreen = React.lazy(() => import('../features/checkout/screens/CheckoutScreen'));
@@ -257,9 +269,11 @@ export function App() {
 
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

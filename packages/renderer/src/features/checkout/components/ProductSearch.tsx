@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useAuthStore } from '../../../stores/authStore';
-import { productAPI } from '../../../services/ipcService';
+import { productAPI, categoryAPI } from '../../../services/ipcService';
 import { formatCents } from '@nexuspos/shared';
 import type { IProduct, ICategory } from '@nexuspos/shared';
 import { Search, X, Grid3x3, List, Package, Tag } from 'lucide-react';
@@ -50,7 +50,8 @@ export function ProductSearch({ onProductSelect }: ProductSearchProps) {
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', storeId],
     queryFn: async () => {
-      const result = await productAPI.list(storeId, undefined, 1, 200);
+      if (!storeId) return [];
+      const result = await categoryAPI.list(storeId);
       return (result.data as ICategory[]) ?? [];
     },
     staleTime: 300_000,
